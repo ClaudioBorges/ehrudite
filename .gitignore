@@ -1,1 +1,35 @@
+# Ignore IDE files
+.vscode
+.idea
+/.ehrudite
+
+# Ignore the Environment
+env
+.tox
+venv
+.venv
+.python-version
+
+# Ignore coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+
+# Ignore test reports
+.test-reports
+test-reports
+
+# Ignore Python cache and prebuilt things
+.cache
+__pycache__
+*.egg-info
+*.pyc
+build
+_build
+dist
+.pytest_cache
+
+# Ignore data file
+data/
 input-data/

@@ -1,0 +1,14 @@
+# Install with -U to keep all requirements up-to-date
+# Environment
+tox
+# code linting and formatting
+black
+# testing
+pytest
+pytest-cov
+pytest-sugar
+# MyPy
+mypy
+#Stubs
+types-setuptools
+types-toml
