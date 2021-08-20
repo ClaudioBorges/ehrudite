@@ -1,2 +1,3 @@
 include README.md LICENSE
+include test-data
 include src/ehrudite/config.ini

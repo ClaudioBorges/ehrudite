@@ -1,2 +1,6 @@
 configparser
-tensorflow>=2.6.0
+tensorflow-text==2.5.*
+tensorflow==2.5.*
+sentencepiece
+apache_beam
+git+https://github.com/ClaudioBorges/ehrpreper.git

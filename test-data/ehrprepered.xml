@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Model>
+  <Language>en-US</Language>
+  <Document>
+    <Content>
+      You speak an infinite deal of nothing.
+      These violent delights have violent ends
+      And in their triump die, like fire and powder
+      Which, as they kiss, consume
+      To die, to sleep -
+      To sleep, perchance to dream - ay, there's the rub,
+      For in this sleep of death what dreams may come...
+    </Content>
+    <Annotation>c1_a1</Annotation>
+    <Annotation>c1_a2</Annotation>
+  </Document>
+  <Document>
+    <Content>
+      Let me not to the marriage of true minds
+      Admit impediments. Love is not love
+      Which alters when it alteration finds,
+      Or bends with the remover to remove.
+      O no, it is an ever-fixed mark
+      That looks on tempests and is never shaken;
+      It is the star to every wand'ring barque,
+      Whose worth's unknown, although his height be taken.
+      Love's not Time's fool, though rosy lips and cheeks
+      Within his bending sickle's compass come;
+      Love alters not with his brief hours and weeks,
+      But bears it out even to the edge of doom.
+      If this be error and upon me proved,
+      I never writ, nor no man ever loved.
+    </Content>
+    <Annotation>c2_a1</Annotation>
+  </Document>
+  <Document>
+    <Content>
+      Conscience doth make cowards of us all.
+    </Content>
+    <Annotation>c3_a1</Annotation>
+    <Annotation>c3_a2</Annotation>
+    <Annotation>c3_a3</Annotation>
+  </Document>
+</Model>
