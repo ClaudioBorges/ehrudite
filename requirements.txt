@@ -1,6 +1,8 @@
+apache_beam
 configparser
+matplotlib
+numpy
+sentencepiece
 tensorflow-text==2.5.*
 tensorflow==2.5.*
-sentencepiece
-apache_beam
 git+https://github.com/ClaudioBorges/ehrpreper.git
