@@ -44,13 +44,20 @@ setup(
     package_dir={"": "src"},
     include_package_data=True,
     install_requires=[
-        # Core
+        "apache_beam",
         "configparser",
-        "tensorflow>=2.6.0",
+        "data-science-types",
+        "ehrpreper @ git+https://github.com/ClaudioBorges/ehrpreper.git",
+        "matplotlib",
+        "numpy",
+        "sentencepiece",
+        "tensorflow-text==2.5.*",
+        "tensorflow==2.5.*",
     ],
     entry_points={
         "console_scripts": [
             "ehrudite = ehrudite.cli:cli",
+            "ehrudite-stat = ehrudite.cli.statistic:cli",
         ],
     },
 )
