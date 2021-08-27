@@ -54,3 +54,19 @@ python setup.py develop
 > project dependencies as well as the dependencies needed to run linting,
 > formatting, and testing commands. This will install the most up-to-date
 > package versions for all dependencies.
+
+## CLIs
+
+### Statistic
+
+Show statistic. So far, only about a ehrpreper_file. Example:
+```
+ehrudite-stat ../ehpreper.xml -g -v
+```
+
+### Tokenizer
+
+Tokenizer related. So far, only generates a vocabulary using a sentence piece. Example:
+```
+ehrudite-tok -g -e ../ehrpreper.xml -vv ../tok/sentencepiece/ sentencepiece
+```

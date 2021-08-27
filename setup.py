@@ -58,6 +58,7 @@ setup(
         "console_scripts": [
             "ehrudite = ehrudite.cli:cli",
             "ehrudite-stat = ehrudite.cli.statistic:cli",
+            "ehrudite-tok = ehrudite.cli.tokenizer:cli",
         ],
     },
 )
