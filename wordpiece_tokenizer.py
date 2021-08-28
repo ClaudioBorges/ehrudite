@@ -1,9 +1,10 @@
+"""ehrpreper WordPieceTokenizer"""
+
 from apache_beam.io.filesystems import FileSystems as beam_fs
 from apache_beam.options.pipeline_options import PipelineOptions
 from typing import Iterable, Type, List
 import apache_beam as beam
 
-"""ehrpreper SentencePieceTokenizer"""
 
 
 @beam.ptransform_fn

@@ -16,21 +16,15 @@ class SentencePieceTokenizer:
 
     @staticmethod
     def generate_vocab(ehrpreper_files, output_file_name_prefix, vocab_size=32000):
-        def ehrpreper_sentences(model):
-            for document in model.documents:
-                for line in document.content.splitlines():
-                    yield line
-                for annotation in document.annotations:
-                    yield annotation
-
-        def ehrpreper_iterator(ehrpreper_files):
-            for ehrpreper_file in ehrpreper_files:
-                for model in ehrpreper.load(ehrpreper_file):
-                    for sentence in ehrpreper_sentences(model):
-                        yield sentence
+        def make_sentences(ehrpreper_files):
+            return (
+                sentence
+                for text in ehrpreper.data_generator(*ehrpreper_files)
+                for sentence in text.splitlines()
+            )
 
         spm.SentencePieceTrainer.train(
-            sentence_iterator=ehrpreper_iterator(ehrpreper_files),
+            sentence_iterator=make_sentences(ehrpreper_files),
             model_prefix=output_file_name_prefix,
             vocab_size=vocab_size,
         )
