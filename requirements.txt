@@ -1,9 +1,7 @@
-apache_beam
 configparser
-data-science-types
 git+https://github.com/ClaudioBorges/ehrpreper.git
 matplotlib
 numpy
-sentencepiece
-tensorflow-text==2.5.*
-tensorflow==2.5.*
+sentencepiece == 0.1.*
+tensorflow-text
+tensorflow

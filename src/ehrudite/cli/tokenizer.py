@@ -1,13 +1,16 @@
 from argparse import ArgumentParser
 from argparse import RawTextHelpFormatter
-from ehrudite.core.tokenizer.sentencepiece_tokenizer import SentencePieceTokenizer
 import ehrudite.cli.base as cli_base
 import ehrudite.core.statistic as stat
+import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
+import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
 import logging
 
 SENTENCE_PIECE = "sentencepiece"
+WORD_PIECE = "wordpiece"
 METHOD_CHOICES = [
     SENTENCE_PIECE,
+    WORD_PIECE,
 ]
 
 
@@ -46,13 +49,14 @@ def cli():
     cli_base.config_logging(args.verbose)
 
     logging.info(f"Started (method={args.method})")
-    if args.method == SENTENCE_PIECE:
-        if args.generate_vocab:
-            logging.info(
-                f"Generating vocabulary (ehrpreper_file={args.ehrpreper_file}, vocab_path={args.vocab_path})"
-            )
-            SentencePieceTokenizer.generate_vocab(
-                [args.ehrpreper_file], args.vocab_path
-            )
+    # Generate Vocabulary
+    if args.generate_vocab:
+        logging.info(
+            f"Generating vocabulary (ehrpreper_file={args.ehrpreper_file}, vocab_path={args.vocab_path})"
+        )
+        if args.method == SENTENCE_PIECE:
+            sentenepiece.generate_vocab([args.ehrpreper_file], args.vocab_path)
+        elif args.method == WORD_PIECE:
+            wordpiece.generate_vocab([args.ehrpreper_file], args.vocab_path)
 
     logging.info("Finished")

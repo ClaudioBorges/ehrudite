@@ -44,15 +44,13 @@ setup(
     package_dir={"": "src"},
     include_package_data=True,
     install_requires=[
-        "apache_beam",
         "configparser",
-        "data-science-types",
         "ehrpreper @ git+https://github.com/ClaudioBorges/ehrpreper.git",
         "matplotlib",
         "numpy",
-        "sentencepiece",
-        "tensorflow-text==2.5.*",
-        "tensorflow==2.5.*",
+        "sentencepiece == 0.1.*",
+        "tensorflow-text",
+        "tensorflow",
     ],
     entry_points={
         "console_scripts": [
