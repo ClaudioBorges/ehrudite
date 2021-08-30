@@ -17,11 +17,14 @@ class WordpieceTokenizer:
     def __init__(self, model_file_name):
         self._wp = tf_text.WordpieceTokenizer(model_file_name)
 
-    def tokenize(self, sentences):
-        return self._wp.tokenize(sentences)
+    def tokenize(self, sentence):
+        words = list(er_text.sentences_to_words([sentence]))
+        return self._wp.tokenize(words)
 
-    def detokenize(self, sequences):
-        return self._wp.detokenize(sequences)
+    def detokenize(self, tokenized_words):
+        words = self._wp.detokenize(tokenized_words)
+        sentence = tf.strings.reduce_join(words, axis=0, separator=" ")
+        return sentence
 
 
 def generate_vocab(ehrpreper_files, output_file_name, vocab_size=32000):

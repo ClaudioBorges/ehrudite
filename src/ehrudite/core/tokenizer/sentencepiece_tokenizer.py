@@ -12,15 +12,12 @@ class SentencepieceTokenizer:
     def __init__(self, model_file_name):
         model = gfile.GFile((model_file_name), "rb").read()
         self._tok = tf_text.SentencepieceTokenizer(model=model, out_type=tf.string)
-        # self._sp = spm.SentencePieceProcessor(model_file=model_file_name)
 
-    def tokenize(self, sentences):
-        # return self._sp.encode(sentences, out_type=str)
-        return self._tok.tokenize(sentences)
+    def tokenize(self, sentence):
+        return self._tok.tokenize(sentence)
 
-    def detokenize(self, sequences):
-        return self._tok.detokenize(sequences)
-        # return self._sp.decode(sequences)
+    def detokenize(self, tokenized_sentence):
+        return self._tok.detokenize(tokenized_sentence)
 
 
 def generate_vocab(ehrpreper_files, output_file_name_prefix, vocab_size=32000):

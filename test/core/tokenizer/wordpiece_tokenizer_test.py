@@ -26,8 +26,7 @@ def test_tokenizer_detokenizer():
         ]
         lower_sentences = er_text.texts_to_sentences(sentences)
         for sentence in lower_sentences:
-            words = list(er_text.sentences_to_words([sentence]))
-            tokens = tokenizer.tokenize(words)
+            tokens = tokenizer.tokenize(sentence)
             detokens = tokenizer.detokenize(tokens)
             expected_detokens = [[word.encode()] for word in sentence.split()]
-            assert all(expected_detokens == detokens.numpy()) == True
+            assert sentence.encode() == detokens.numpy()

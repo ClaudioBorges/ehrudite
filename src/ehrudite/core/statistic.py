@@ -6,6 +6,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def from_wordpiece_ehrpreper(
+    ehrpreper_file_name, wordpice_vocab_file, include_graphs=True
+):
+    pass
+
+
 def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
     def _annotations_stat(annotations_list, include_graphs):
         n_annotations = [len(annotations) for annotations in annotations_list]
