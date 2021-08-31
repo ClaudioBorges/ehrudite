@@ -16,7 +16,8 @@ def texts_to_sentences(texts, to_lower=True):
     return (
         sentence.lower() if to_lower else sentence
         for text in texts
-        for sentence in text.splitlines()
+        for sentence in map(lambda s: s.strip(), text.splitlines())
+        if len(sentence) > 0
     )
 
 

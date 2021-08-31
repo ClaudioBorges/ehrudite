@@ -17,10 +17,10 @@ def test_generator_content():
 
 
 def test_texts_to_sentence():
-    elms = ["\nA\nb\n", "C"]
+    elms = ["\n\r\nA\n\n\nb\n\n", "\t", "\n\nC"]
 
     got = er_text.texts_to_sentences(elms, to_lower=False)
-    expected = ["", "A", "b", "C"]
+    expected = ["A", "b", "C"]
     assert list(got) == expected
 
     got_lower = er_text.texts_to_sentences(elms)

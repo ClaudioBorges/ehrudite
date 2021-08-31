@@ -11,7 +11,7 @@ import tensorflow_text as tf_text
 class SentencepieceTokenizer:
     def __init__(self, model_file_name):
         model = gfile.GFile((model_file_name), "rb").read()
-        self._tok = tf_text.SentencepieceTokenizer(model=model, out_type=tf.string)
+        self._tok = tf_text.SentencepieceTokenizer(model=model)
 
     def tokenize(self, sentence):
         return self._tok.tokenize(sentence)
