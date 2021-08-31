@@ -55,7 +55,7 @@ def cli():
             f"Generating vocabulary (ehrpreper_file={args.ehrpreper_file}, vocab_path={args.vocab_path})"
         )
         if args.method == SENTENCE_PIECE:
-            sentenepiece.generate_vocab([args.ehrpreper_file], args.vocab_path)
+            sentencepiece.generate_vocab([args.ehrpreper_file], args.vocab_path)
         elif args.method == WORD_PIECE:
             wordpiece.generate_vocab([args.ehrpreper_file], args.vocab_path)
 
