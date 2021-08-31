@@ -51,6 +51,7 @@ setup(
         "sentencepiece == 0.1.*",
         "tensorflow-text",
         "tensorflow",
+        "tqdm",
     ],
     entry_points={
         "console_scripts": [

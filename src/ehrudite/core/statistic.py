@@ -1,20 +1,115 @@
 """Ehrpreper statistic"""
 
+from tqdm import tqdm
 import ehrpreper
+import ehrudite.core.text as er_text
+import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
+import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def from_wordpiece_ehrpreper(
-    ehrpreper_file_name, wordpice_vocab_file, include_graphs=True
+def _load_annotations_collections_from_ehrpreper(ehrpreper_file_name):
+    logging.info(
+        f"_load_annotations_collections_from_ehrpreper (file_name={ehrpreper_file_name})"
+    )
+    return (
+        document.annotations
+        for model in ehrpreper.load(ehrpreper_file_name)
+        for document in model.documents
+    )
+
+
+def _load_contents_from_ehrpreper(ehrpreper_file_name):
+    logging.info(f"_load_contents_from_ehrpreper (file_name={ehrpreper_file_name})")
+    return (
+        document.content
+        for model in ehrpreper.load(ehrpreper_file_name)
+        for document in model.documents
+    )
+
+
+def _from_tokenizer_ehpreper(
+    ehrpreper_file_name, tokenizer, tokenize_and_get_num_tokens, include_graphs=True
 ):
-    pass
+    logging.info(
+        f"Generating tokenizer statistic (file_name={ehrpreper_file_name}, name={tokenizer.__class__.__name__})..."
+    )
+
+    n_contents = sum([1 for i in _load_contents_from_ehrpreper(ehrpreper_file_name)])
+
+    n_sentences_per_content = []
+    n_tokens_per_sentence = []
+    n_tokens_per_content = []
+
+    logging.info(f"Iterating over contents (n_contents={n_contents})...")
+    for model in tqdm(iterable=ehrpreper.load(ehrpreper_file_name), total=n_contents):
+        for document in model.documents:
+            content = document.content
+            n_sentences = 0
+            n_tokens_acc = 0
+            for sentence in er_text.texts_to_sentences([content]):
+                n_sentences += 1
+                n_tokens = tokenize_and_get_num_tokens(tokenizer, sentence)
+                n_tokens_acc += n_tokens
+                n_tokens_per_sentence.append(n_tokens)
+            n_sentences_per_content.append(n_sentences)
+            n_tokens_per_content.append(n_tokens_acc)
+    logging.info(
+        f"{tokenizer.__class__.__name__} statistics"
+        f"\n\tsentences_per_contens"
+        f"\n\t\tmean={np.mean(n_sentences_per_content)}"
+        f"\n\t\tstd={np.std(n_sentences_per_content)}"
+        f"\n\t\ttotal={len(n_sentences_per_content)}"
+        f"\n\ttokens_per_content"
+        f"\n\t\tmean={np.mean(n_tokens_per_content)}"
+        f"\n\t\tstd={np.std(n_tokens_per_content)}"
+        f"\n\t\ttotal={len(n_tokens_per_content)}"
+        f"\n\ttokens_per_sentence"
+        f"\n\t\tmean={np.mean(n_tokens_per_sentence)}"
+        f"\n\t\tstd={np.std(n_tokens_per_sentence)}"
+        f"\n\t\ttotal={len(n_tokens_per_sentence)}"
+    )
+
+
+def from_wordpiece_ehrpreper(
+    ehrpreper_file_name, wordpiece_vocab_file, include_graphs=True
+):
+    def tokenize_and_get_num_tokens(tokenizer, sentence):
+        tokens = tokenizer.tokenize(sentence)
+        return tokens.flat_values.shape.num_elements()
+
+    logging.info(f"Starting Wordpiece statistic...")
+    tokenizer = wordpiece.WordpieceTokenizer(wordpiece_vocab_file)
+    _from_tokenizer_ehpreper(
+        ehrpreper_file_name,
+        tokenizer,
+        tokenize_and_get_num_tokens,
+        include_graphs=include_graphs,
+    )
+
+
+def from_sentencepiece_ehrpreper(
+    ehrpreper_file_name, sentencepiece_model_file, include_graphs=True
+):
+    def tokenize_and_get_num_tokens(tokenizer, sentence):
+        tokens = tokenizer.tokenize(sentence)
+        return tokens.shape.num_elements()
+
+    logging.info(f"Starting Sentencepiece statistic...")
+    tokenizer = sentencepiece.SentencepieceTokenizer(sentencepiece_model_file)
+    _from_tokenizer_ehpreper(
+        ehrpreper_file_name,
+        tokenizer,
+        tokenize_and_get_num_tokens,
+        include_graphs=include_graphs,
+    )
 
 
 def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
-    def _annotations_stat(annotations_list, include_graphs):
-        n_annotations = [len(annotations) for annotations in annotations_list]
+    def _annotations_stat(annotations_collections, include_graphs):
+        n_annotations = [len(annotations) for annotations in annotations_collections]
         logging.info(
             f"Annotations' number"
             + f"\n\tmean={np.mean(n_annotations)}"
@@ -55,14 +150,12 @@ def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
 
     logging.info(f"Generating statistic (file_name={ehrpreper_file_name})...")
 
-    annotations_list = []
-    contents = []
-    for model in ehrpreper.load(ehrpreper_file_name):
-        for document in model.documents:
-            annotations_list.append(document.annotations)
-            contents.append(document.content)
+    annotations_collections = _load_annotations_collections_from_ehrpreper(
+        ehrpreper_file_name
+    )
+    contents = _load_contents_from_ehrpreper(ehrpreper_file_name)
 
-    _annotations_stat(annotations_list, include_graphs)
+    _annotations_stat(annotations_collections, include_graphs)
     _content_stat(contents, include_graphs)
     if include_graphs:
         plt.show()

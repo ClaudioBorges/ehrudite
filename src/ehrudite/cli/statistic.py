@@ -17,6 +17,18 @@ def make_parser():
         help=r"show graphs",
     )
     parser.add_argument(
+        "-w",
+        "--wordpiece_file",
+        action="store",
+        help=r"wordpiece vocab file",
+    )
+    parser.add_argument(
+        "-s",
+        "--sentencepiece_file",
+        action="store",
+        help=r"sentence model file",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="count",
@@ -33,5 +45,9 @@ def cli():
     cli_base.config_logging(args.verbose)
 
     logging.info(f"Started (ehrpreper_file={args.ehrpreper_file})")
-    stat.from_ehrpreper(args.ehrpreper_file, args.graphs)
+    # stat.from_ehrpreper(args.ehrpreper_file, args.graphs)
+    # if args.wordpiece_file is not None:
+    #    stat.from_wordpiece_ehrpreper(args.ehrpreper_file, args.wordpiece_file)
+    if args.sentencepiece_file is not None:
+        stat.from_sentencepiece_ehrpreper(args.ehrpreper_file, args.sentencepiece_file)
     logging.info("Finished")
