@@ -8,6 +8,7 @@ import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
 def _load_annotations_collections_from_ehrpreper(ehrpreper_file_name):
@@ -31,10 +32,11 @@ def _load_contents_from_ehrpreper(ehrpreper_file_name):
 
 
 def _from_tokenizer_ehpreper(
-    ehrpreper_file_name, tokenizer, tokenize_and_get_num_tokens, include_graphs=True
+    ehrpreper_file_name, tokenizer, tokenize_and_get_num_tokens, output_path
 ):
+    tokenizer_name = tokenizer.__class__.__name__
     logging.info(
-        f"Generating tokenizer statistic (file_name={ehrpreper_file_name}, name={tokenizer.__class__.__name__})..."
+        f"Generating tokenizer statistic (file_name={ehrpreper_file_name}, name={tokenizer_name})..."
     )
 
     n_contents = sum([1 for i in _load_contents_from_ehrpreper(ehrpreper_file_name)])
@@ -57,7 +59,7 @@ def _from_tokenizer_ehpreper(
             n_sentences_per_content.append(n_sentences)
             n_tokens_per_content.append(n_tokens_acc)
     logging.info(
-        f"{tokenizer.__class__.__name__} statistics"
+        f"{tokenizer_name} statistics"
         f"\n\tsentences_per_contens"
         f"\n\t\tmean={np.mean(n_sentences_per_content)}"
         f"\n\t\tstd={np.std(n_sentences_per_content)}"
@@ -71,11 +73,37 @@ def _from_tokenizer_ehpreper(
         f"\n\t\tstd={np.std(n_tokens_per_sentence)}"
         f"\n\t\ttotal={len(n_tokens_per_sentence)}"
     )
+    plt.figure(f"{tokenizer_name} Sentences' number per content")
+    _ = plt.hist(n_sentences_per_content, bins="auto", density=True)
+    plt.xlabel("Sentences' number per content")
+    plt.ylabel("Density")
+    plt.title(
+        f"{tokenizer_name}\nProbability distribution of the sentences' number per content"
+    )
+    plt.savefig(
+        os.path.join(output_path, f"{tokenizer_name}-sentences-per-content.png")
+    )
+
+    plt.figure(f"{tokenizer_name} Tokens' number per content")
+    _ = plt.hist(n_tokens_per_content, bins="auto", density=True)
+    plt.xlabel("Tokens' number per content")
+    plt.ylabel("Density")
+    plt.title(
+        f"{tokenizer_name}\nProbability distribution of the tokens' number per content"
+    )
+    plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-content.png"))
+
+    plt.figure(f"{tokenizer_name} Tokens' number per sentence")
+    _ = plt.hist(n_tokens_per_sentence, bins="auto", density=True)
+    plt.xlabel("Tokens' number per senence")
+    plt.ylabel("Density")
+    plt.title(
+        f"{tokenizer_name}\nProbability distribution of the tokens' number per sentence"
+    )
+    plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-sentence.png"))
 
 
-def from_wordpiece_ehrpreper(
-    ehrpreper_file_name, wordpiece_vocab_file, include_graphs=True
-):
+def from_wordpiece_ehrpreper(ehrpreper_file_name, wordpiece_vocab_file, output_path):
     def tokenize_and_get_num_tokens(tokenizer, sentence):
         tokens = tokenizer.tokenize(sentence)
         return tokens.flat_values.shape.num_elements()
@@ -86,12 +114,12 @@ def from_wordpiece_ehrpreper(
         ehrpreper_file_name,
         tokenizer,
         tokenize_and_get_num_tokens,
-        include_graphs=include_graphs,
+        output_path,
     )
 
 
 def from_sentencepiece_ehrpreper(
-    ehrpreper_file_name, sentencepiece_model_file, include_graphs=True
+    ehrpreper_file_name, sentencepiece_model_file, output_path
 ):
     def tokenize_and_get_num_tokens(tokenizer, sentence):
         tokens = tokenizer.tokenize(sentence)
@@ -103,12 +131,12 @@ def from_sentencepiece_ehrpreper(
         ehrpreper_file_name,
         tokenizer,
         tokenize_and_get_num_tokens,
-        include_graphs=include_graphs,
+        output_path,
     )
 
 
-def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
-    def _annotations_stat(annotations_collections, include_graphs):
+def from_ehrpreper(ehrpreper_file_name, output_path):
+    def _annotations_stat(annotations_collections):
         n_annotations = [len(annotations) for annotations in annotations_collections]
         logging.info(
             f"Annotations' number"
@@ -119,17 +147,16 @@ def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
             + f"\n\tmax={np.max(n_annotations)}"
             + f"\n\thistogram={np.histogram(n_annotations, density=True)}"
         )
-        if include_graphs:
-            plt.figure("Annotations' number per content")
-            _ = plt.hist(
-                n_annotations, bins=np.max(n_annotations) + 1, rwidth=0.8, density=True
-            )
-            plt.xlabel("Annotations' number per content")
-            plt.ylabel("Density")
-            plt.title("Probability distribution of the annotations' number per content")
-            plt.show(block=False)
+        plt.figure("Annotations' number per content")
+        _ = plt.hist(
+            n_annotations, bins=np.max(n_annotations) + 1, rwidth=0.8, density=True
+        )
+        plt.xlabel("Annotations' number per content")
+        plt.ylabel("Density")
+        plt.title("Probability distribution of the annotations' number per content")
+        plt.savefig(os.path.join(output_path, f"ehrpreper-annotations-per-content-png"))
 
-    def _content_stat(contents, include_graphs):
+    def _content_stat(contents):
         n_len_contents = [len(content) for content in contents]
         logging.info(
             f"Characters' number per content"
@@ -140,13 +167,12 @@ def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
             + f"\n\tmax={np.max(n_len_contents)}"
             + f"\n\thistogram={np.histogram(n_len_contents, density=True)}"
         )
-        if include_graphs:
-            plt.figure("Characters' number per content")
-            _ = plt.hist(n_len_contents, bins="auto", density=True)
-            plt.xlabel("Characters' number per content")
-            plt.ylabel("Density")
-            plt.title("Probability distribution of the characters' number per content")
-            plt.show(block=False)
+        plt.figure("Characters' number per content")
+        _ = plt.hist(n_len_contents, bins="auto", density=True)
+        plt.xlabel("Characters' number per content")
+        plt.ylabel("Density")
+        plt.title("Probability distribution of the characters' number per content")
+        plt.savefig(os.path.join(output_path, f"ehrpreper-characters-per-content-png"))
 
     logging.info(f"Generating statistic (file_name={ehrpreper_file_name})...")
 
@@ -155,7 +181,5 @@ def from_ehrpreper(ehrpreper_file_name, include_graphs=True):
     )
     contents = _load_contents_from_ehrpreper(ehrpreper_file_name)
 
-    _annotations_stat(annotations_collections, include_graphs)
-    _content_stat(contents, include_graphs)
-    if include_graphs:
-        plt.show()
+    _annotations_stat(annotations_collections)
+    _content_stat(contents)

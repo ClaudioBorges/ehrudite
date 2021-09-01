@@ -11,10 +11,10 @@ def make_parser():
         formatter_class=RawTextHelpFormatter,
     )
     parser.add_argument(
-        "-g",
-        "--graphs",
-        action="store_true",
-        help=r"show graphs",
+        "-o",
+        "--output_path",
+        default="../",
+        help=r"default output artifacts location",
     )
     parser.add_argument(
         "-w",
@@ -44,10 +44,17 @@ def cli():
     args = parser.parse_args()
     cli_base.config_logging(args.verbose)
 
-    logging.info(f"Started (ehrpreper_file={args.ehrpreper_file})")
-    # stat.from_ehrpreper(args.ehrpreper_file, args.graphs)
-    # if args.wordpiece_file is not None:
-    #    stat.from_wordpiece_ehrpreper(args.ehrpreper_file, args.wordpiece_file)
+    logging.info(
+        f"Started (ehrpreper_file={args.ehrpreper_file}, output_path={args.output_path})"
+    )
+    stat.from_ehrpreper(args.ehrpreper_file, args.output_path)
+    if args.wordpiece_file is not None:
+        stat.from_wordpiece_ehrpreper(
+            args.ehrpreper_file, args.wordpiece_file, args.output_path
+        )
     if args.sentencepiece_file is not None:
-        stat.from_sentencepiece_ehrpreper(args.ehrpreper_file, args.sentencepiece_file)
+        stat.from_sentencepiece_ehrpreper(
+            args.ehrpreper_file, args.sentencepiece_file, args.output_path
+        )
+
     logging.info("Finished")
