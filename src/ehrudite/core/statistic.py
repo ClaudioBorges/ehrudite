@@ -63,14 +63,23 @@ def _from_tokenizer_ehpreper(
         f"\n\tsentences_per_contens"
         f"\n\t\tmean={np.mean(n_sentences_per_content)}"
         f"\n\t\tstd={np.std(n_sentences_per_content)}"
+        f"\n\t\tmax={np.max(n_sentences_per_content)}"
+        f"\n\t\tmin={np.min(n_sentences_per_content)}"
+        f"\n\t\thistogram={np.histogram(n_sentences_per_content, density=True)}"
         f"\n\t\ttotal={len(n_sentences_per_content)}"
         f"\n\ttokens_per_content"
         f"\n\t\tmean={np.mean(n_tokens_per_content)}"
         f"\n\t\tstd={np.std(n_tokens_per_content)}"
+        f"\n\t\tmax={np.max(n_tokens_per_content)}"
+        f"\n\t\tmin={np.min(n_tokens_per_content)}"
+        f"\n\t\thistogram={np.histogram(n_tokens_per_content, density=True)}"
         f"\n\t\ttotal={len(n_tokens_per_content)}"
         f"\n\ttokens_per_sentence"
         f"\n\t\tmean={np.mean(n_tokens_per_sentence)}"
         f"\n\t\tstd={np.std(n_tokens_per_sentence)}"
+        f"\n\t\tmax={np.max(n_tokens_per_sentence)}"
+        f"\n\t\tmin={np.min(n_tokens_per_sentence)}"
+        f"\n\t\thistogram={np.histogram(n_tokens_per_sentence, density=True)}"
         f"\n\t\ttotal={len(n_tokens_per_sentence)}"
     )
     plt.figure(f"{tokenizer_name} Sentences' number per content")
@@ -94,8 +103,8 @@ def _from_tokenizer_ehpreper(
     plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-content.png"))
 
     plt.figure(f"{tokenizer_name} Tokens' number per sentence")
-    _ = plt.hist(n_tokens_per_sentence, bins="auto", density=True)
-    plt.xlabel("Tokens' number per senence")
+    _ = plt.hist(n_tokens_per_sentence, bins=[i for i in range(80)], density=True)
+    plt.xlabel("Tokens' number per sentence")
     plt.ylabel("Density")
     plt.title(
         f"{tokenizer_name}\nProbability distribution of the tokens' number per sentence"

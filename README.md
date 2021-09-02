@@ -59,14 +59,24 @@ python setup.py develop
 
 ### Statistic
 
-Show statistic. So far, only about a ehrpreper_file. Example:
+Show dataset statistic:
 ```
-ehrudite-stat ../ehpreper.xml -g -v
+ehrudite-stat ../data/ehpreper.xml -g -v
+```
+
+Show dataset and tokenizer statistic:
+```
+ehrudite-stat ../data/ehrpreper.xml -vv -w ../data/tok/wordpiece/wordpiece.vocab -s ../data/tok/sentencepiece/sentencepiece.model -o ../data/statistics/
 ```
 
 ### Tokenizer
 
-Tokenizer related. So far, only generates a vocabulary using a sentence piece. Example:
+Tokenize using wordpiece:
 ```
-ehrudite-tok -g -e ../ehrpreper.xml -vv ../tok/sentencepiece/ sentencepiece
+ehrudite-tok -g -e ../data/ehrpreper.xml -vv ../data/tok/wordpiece/ wordpiece
+```
+
+Tokenizer using sentencepiece:
+```
+ehrudite-tok -g -e ../data/ehrpreper.xml -vv ../data/tok/sentencepiece/ sentencepiece
 ```
