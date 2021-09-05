@@ -1,6 +1,7 @@
 # Install with -U to keep all requirements up-to-date
 # Environment
 tox
+ipython
 # code linting and formatting
 black
 # testing

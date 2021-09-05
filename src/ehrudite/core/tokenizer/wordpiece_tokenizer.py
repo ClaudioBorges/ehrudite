@@ -13,18 +13,22 @@ import tensorflow_text as tf_text
 RESERVED_TOKES = ["[PAD]", "[UNK]", "[START]", "[END]"]
 
 
-class WordpieceTokenizer:
+class WordpieceTokenizer(tf_text.WordpieceTokenizer):
     def __init__(self, model_file_name):
-        self._wp = tf_text.WordpieceTokenizer(model_file_name)
+        super(WordpieceTokenizer, self).__init__(model_file_name)
 
     def tokenize(self, sentence):
         words = list(er_text.sentences_to_words([sentence]))
-        return self._wp.tokenize(words)
+        return super(WordpieceTokenizer, self).tokenize(words)
 
     def detokenize(self, tokenized_words):
-        words = self._wp.detokenize(tokenized_words)
+        words = super(WordpieceTokenizer, self).detokenize(tokenized_words)
         sentence = tf.strings.reduce_join(words, axis=0, separator=" ")
         return sentence
+
+    def vocab_size(self):
+        # Tensorflow text 2.6.0 does not have a vocab_size method
+        return self._vocab_lookup_table.size()
 
 
 def generate_vocab(ehrpreper_files, output_file_name, vocab_size=32000):

@@ -19,6 +19,10 @@ def test_tokenizer_detokenizer():
         )
         tokenizer = wordpiece.WordpieceTokenizer(vocab_file)
 
+        assert (
+            VOCABULARY_SIZE * 0.5 <= tokenizer.vocab_size().numpy() <= VOCABULARY_SIZE
+        )
+
         sentences = [
             "To be, or not to be, that is the question.",
             "Wisely and slow; they stumble that run fast.",

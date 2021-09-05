@@ -8,16 +8,10 @@ import tensorflow as tf
 import tensorflow_text as tf_text
 
 
-class SentencepieceTokenizer:
+class SentencepieceTokenizer(tf_text.SentencepieceTokenizer):
     def __init__(self, model_file_name):
         model = gfile.GFile((model_file_name), "rb").read()
-        self._tok = tf_text.SentencepieceTokenizer(model=model)
-
-    def tokenize(self, sentence):
-        return self._tok.tokenize(sentence)
-
-    def detokenize(self, tokenized_sentence):
-        return self._tok.detokenize(tokenized_sentence)
+        super(SentencepieceTokenizer, self).__init__(model=model)
 
 
 def generate_vocab(ehrpreper_files, output_file_name_prefix, vocab_size=32000):
