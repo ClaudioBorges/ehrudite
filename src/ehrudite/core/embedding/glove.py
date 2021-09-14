@@ -2,17 +2,11 @@
 
 from __future__ import division
 from collections import Counter, defaultdict
+from ehrudite.core.embedding import NotFitToCorpusError
+from ehrudite.core.embedding import NotTrainedError
 from random import shuffle
 import os
 import tensorflow as tf
-
-
-class NotTrainedError(Exception):
-    pass
-
-
-class NotFitToCorpusError(Exception):
-    pass
 
 
 class GloVeModel:

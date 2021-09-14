@@ -1,8 +1,8 @@
-"""The test file for Glove embedding"""
+"""The test file for Skipgram embedding"""
 
 from ehrudite.core.embedding import NotFitToCorpusError
 from ehrudite.core.embedding import NotTrainedError
-import ehrudite.core.embedding.glove as glove
+import ehrudite.core.embedding.skipgram as skipgram
 import pytest
 import random
 
@@ -22,7 +22,7 @@ def __random_vocab(samples, id_min=5, id_max=5000):
     return list(set([random.randint(id_min, id_max) for i in range(samples)]))
 
 
-def test_glove_embedding():
+def test_skipgram_embedding():
     vocab = __random_vocab(random.randint(10, 500))
     corpus = __random_corpus(vocab)
     corpus_vocab = sorted(list(set([word for sentence in corpus for word in sentence])))
@@ -32,7 +32,9 @@ def test_glove_embedding():
     embedding_size = random.randint(10, 15)
     epochs = random.randint(2, 4)
 
-    model = glove.GloVeModel(embedding_size=embedding_size, context_size=context_size)
+    model = skipgram.SkipgramModel(
+        embedding_size=embedding_size, context_size=context_size
+    )
     model.fit_to_corpus(corpus)
     model.train(num_epochs=epochs)
 
@@ -49,25 +51,25 @@ def test_glove_embedding():
         assert len(model.embedding_for_id(model.id_for_word(word))) == embedding_size
 
 
-def test_glove_not_trained_error_on_embeddings():
-    model = glove.GloVeModel(embedding_size=1, context_size=1)
+def test_skipgram_not_trained_error_on_embeddings():
+    model = skipgram.SkipgramModel(embedding_size=1, context_size=1)
     with pytest.raises(NotTrainedError):
         model.embeddings()
 
 
-def test_glove_not_fit_error_on_words():
-    model = glove.GloVeModel(embedding_size=1, context_size=1)
-    with pytest.raises(NotFitToCorpusError):
+def test_skipgram_not_fit_error_on_words():
+    model = skipgram.SkipgramModel(embedding_size=1, context_size=1)
+    with pytest.raises(NotTrainedError):
         model.words()
 
 
-def test_glove_not_fit_error_on_id_to_words():
-    model = glove.GloVeModel(embedding_size=1, context_size=1)
-    with pytest.raises(NotFitToCorpusError):
+def test_skipgram_not_fit_error_on_id_to_words():
+    model = skipgram.SkipgramModel(embedding_size=1, context_size=1)
+    with pytest.raises(NotTrainedError):
         model.id_for_word(0)
 
 
-def test_glove_not_fit_error_on_train():
-    model = glove.GloVeModel(embedding_size=1, context_size=1)
+def test_skipgram_not_fit_error_on_train():
+    model = skipgram.SkipgramModel(embedding_size=1, context_size=1)
     with pytest.raises(NotFitToCorpusError):
         model.train(1)

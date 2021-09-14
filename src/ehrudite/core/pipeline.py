@@ -3,7 +3,7 @@
 
 import ehrpreper
 import ehrudite.core.text as er_text
-from ehrudite.core.embedding.skipgram import Skipgram
+from ehrudite.core.embedding.skipgram import SkipgramModel
 from ehrudite.core.embedding.glove import GloVeModel
 
 
@@ -25,18 +25,17 @@ class EhruditePipeline:
 
     def _tf_run(self):
         repeatable_gen = er_text.ProgressableGenerator(self._make_generator)
+        import pdb
 
-        model = GloVeModel(embedding_size=300, context_size=10)
-        model.fit_to_corpus(repeatable_gen)
-        model.train(num_epochs=100)
-        import ipdb
+        pdb.set_trace()
 
-        ipdb.set_trace()
-        model.embedding_for("reddit")
-        model.generate_tsne()
+        # model = GloVeModel(embedding_size=300, context_size=10)
+        # model.fit_to_corpus(repeatable_gen)
+        # model.train(num_epochs=100)
 
-        skipgram = Skipgram()
-        skipgram.train(repeatable_gen, epochs=20, window=100, workers=16)
+        skipgram = SkipgramModel()
+        skipgram.fit_to_corpus(repeatable_gen)
+        skipgram.train(epochs=20, window=100, workers=16)
         lll = list(model.wv.key_to_index.keys())
 
         # model.save("word2vec.model")
