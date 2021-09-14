@@ -25,8 +25,8 @@ def test_tokenizer_detokenizer():
             "Wisely and slow; they stumble that run fast.",
             "Some Cupid kills with arrows, some with traps.",
         ]
-        lower_sentences = er_text.texts_to_sentences(sentences)
-        for sentence in lower_sentences:
+        preprocessed = er_text.preprocess(sentences)
+        for sentence in preprocessed:
             tokens = tokenizer.tokenize(sentence)
             detokens = tokenizer.detokenize(tokens)
             assert sentence.encode() == detokens.numpy()

@@ -16,20 +16,46 @@ def test_generator_content():
     assert list(generator()) == elms
 
 
-def test_texts_to_sentence():
-    elms = ["\n\r\nA\n\n\nb\n\n", "\t", "\n\nC"]
+def test_repeatable_generator():
+    def f_generator(limit):
+        return (i for i in range(limit))
 
-    got = er_text.texts_to_sentences(elms, to_lower=False)
-    expected = ["A", "b", "C"]
-    assert list(got) == expected
-
-    got_lower = er_text.texts_to_sentences(elms)
-    expected_lower = list(map(lambda s: s.lower(), expected))
-    assert list(got_lower) == expected_lower
+    generator = er_text.RepeatableGenerator(f_generator, limit=10)
+    assert list(generator()) == list(range(10))
+    assert list(generator()) == list(range(10))
+    assert list(generator) == list(range(10))
+    assert list(generator) == list(range(10))
 
 
-def test_sentences_to_words():
+def test_progressable_generator():
+    def f_generator(limit):
+        return (i for i in range(limit))
+
+    generator = er_text.ProgressableGenerator(f_generator, limit=10)
+    assert list(generator) == list(range(10))
+    assert list(generator) == list(range(10))
+    assert list(generator()) == list(range(10))
+    assert list(generator()) == list(range(10))
+
+    generator = er_text.ProgressableGenerator(f_generator, limit=10)
+    assert list(generator) == list(range(10))
+    assert list(generator) == list(range(10))
+    assert list(generator()) == list(range(10))
+    assert list(generator()) == list(range(10))
+
+
+def test_split_into_words():
     elms = ["sentence one", "part 2."]
-    got = er_text.sentences_to_words(elms)
+    got = er_text.split_into_words(elms)
     expected = ["sentence", "one", "part", "2."]
     assert list(got) == expected
+
+
+def test_preprocess():
+    texts = ["\n\nA\nb ", "C\r"]
+    assert list(er_text.preprocess(texts)) == ["a b", "c"]
+    assert list(er_text.preprocess(texts, to_lower=False)) == ["A b", "C"]
+    assert (
+        list(er_text.preprocess(texts, to_lower=False, remove_split_lines=False))
+        == texts
+    )

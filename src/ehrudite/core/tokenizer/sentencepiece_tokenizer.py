@@ -16,10 +16,10 @@ class SentencepieceTokenizer(tf_text.SentencepieceTokenizer):
 
 def generate_vocab(ehrpreper_files, output_file_name_prefix, vocab_size=32000):
     texts = ehrpreper.data_generator(*ehrpreper_files)
-    sentences = er_text.texts_to_sentences(texts)
+    preprocessed = er_text.preprocess(texts)
 
     spm.SentencePieceTrainer.train(
-        sentence_iterator=sentences,
+        sentence_iterator=preprocessed,
         model_prefix=output_file_name_prefix,
         vocab_size=vocab_size,
     )

@@ -51,7 +51,7 @@ def _from_tokenizer_ehpreper(
             content = document.content
             n_sentences = 0
             n_tokens_acc = 0
-            for sentence in er_text.texts_to_sentences([content]):
+            for sentence in er_text.preprocess([content]):
                 n_sentences += 1
                 n_tokens = tokenize_and_get_num_tokens(tokenizer, sentence)
                 n_tokens_acc += n_tokens
@@ -103,7 +103,7 @@ def _from_tokenizer_ehpreper(
     plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-content.png"))
 
     plt.figure(f"{tokenizer_name} Tokens' number per sentence")
-    _ = plt.hist(n_tokens_per_sentence, bins=[i for i in range(80)], density=True)
+    _ = plt.hist(n_tokens_per_sentence, bins="auto", density=True)
     plt.xlabel("Tokens' number per sentence")
     plt.ylabel("Density")
     plt.title(

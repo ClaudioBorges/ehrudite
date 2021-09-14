@@ -52,6 +52,9 @@ setup(
         "tensorflow-text",
         "tensorflow",
         "tqdm",
+        "gensim < 4.1",
+        "python-Levenshtein",
+        "scikit-learn",
     ],
     entry_points={
         "console_scripts": [

@@ -18,11 +18,14 @@ class WordpieceTokenizer(tf_text.WordpieceTokenizer):
         super(WordpieceTokenizer, self).__init__(model_file_name)
 
     def tokenize(self, sentence):
-        words = list(er_text.sentences_to_words([sentence]))
-        return super(WordpieceTokenizer, self).tokenize(words)
+        words = list(er_text.split_into_words([sentence]))
+        word_tokens = super(WordpieceTokenizer, self).tokenize(words)
+        return word_tokens.merge_dims(0, -1)
 
-    def detokenize(self, tokenized_words):
-        words = super(WordpieceTokenizer, self).detokenize(tokenized_words)
+    def detokenize(self, tokens):
+        word_tokens = tf.reshape(tokens, [1, -1])
+        sequences = super(WordpieceTokenizer, self).detokenize(word_tokens)
+        words = sequences.merge_dims(0, -1)
         sentence = tf.strings.reduce_join(words, axis=0, separator=" ")
         return sentence
 
@@ -38,8 +41,8 @@ def generate_vocab(ehrpreper_files, output_file_name, vocab_size=32000):
                 print(token, file=f)
 
     texts = ehrpreper.data_generator(*ehrpreper_files)
-    sentences = er_text.texts_to_sentences(texts)
-    words = er_text.sentences_to_words(sentences)
+    preprocessed = er_text.preprocess(texts)
+    words = er_text.split_into_words(preprocessed)
 
     dataset = tf.data.Dataset.from_generator(
         Generator(words), output_types=tf.string, output_shapes=()

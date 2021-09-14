@@ -2,6 +2,7 @@
 # Environment
 tox
 ipython
+ipdb
 # code linting and formatting
 black
 # testing
