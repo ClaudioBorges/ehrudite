@@ -1,9 +1,11 @@
 """Implement Skipgram from Word2Vec"""
 
+from ehrudite.core.embedding import EmbeddingEntity
 from ehrudite.core.embedding import NotFitToCorpusError
 from ehrudite.core.embedding import NotTrainedError
 from gensim.models import Word2Vec
 from gensim.models.callbacks import CallbackAny2Vec
+import pickle
 
 
 class MonitorCallback(CallbackAny2Vec):
@@ -34,6 +36,7 @@ class SkipgramModel:
         self._corpus = None
         self._embedding_size = embedding_size
         self._context_size = context_size
+        self._embedding_entity = None
 
     def fit_to_corpus(self, corpus):
         self._corpus = corpus
@@ -65,39 +68,48 @@ class SkipgramModel:
             **kwargs,
         )
 
+        self._embedding_entity = EmbeddingEntity(
+            self._model.wv.vectors,
+            self._model.wv.index_to_key,
+            self._model.wv.key_to_index,
+        )
+
     def embedding_for_word(self, word):
-        if self._model is None:
-            raise NotTrainedError(
-                "Need to train model before accessing embedding_for_word"
-            )
         return self.embedding_for_id(self.id_for_word(word))
 
     def embedding_for_id(self, model_id):
-        if self._model is None:
-            raise NotTrainedError(
-                "Need to train model before accessing embedding_for_id"
-            )
-        return self._model.wv.vectors[model_id]
+        return self.embeddings[model_id]
 
     @property
     def vocab_size(self):
-        if self._model is None:
-            raise NotTrainedError("Need to train model before accessing vocab_size")
-        return len(self._model.wv.index_to_key)
+        self.__validate_train()
+        return len(self.words)
 
     @property
     def words(self):
-        if self._model is None:
-            raise NotTrainedError("Need to train model before accessing words")
-        return self._model.wv.index_to_key
+        self.__validate_train()
+        return self._embedding_entity.words
 
     @property
     def embeddings(self):
-        if self._model is None:
-            raise NotTrainedError("Need to train model before accessing embeddings")
-        return self._model.wv.vectors
+        self.__validate_train()
+        return self._embedding_entity.embeddings
 
     def id_for_word(self, word):
-        if self._model is None:
-            raise NotTrainedError("Need to train model before accessing id_for_word")
-        return self._model.wv.key_to_index[word]
+        self.__validate_train()
+        return self._embedding_entity.id_for_word[word]
+
+    def save(self, file_name):
+        with open(file_name, "wb") as f:
+            pickle.dump(self._embedding_entity, f)
+
+    @staticmethod
+    def load(file_name):
+        with open(file_name, "rb") as f:
+            model = SkipgramModel()
+            model._embedding_entity = pickle.load(f)
+            return model
+
+    def __validate_train(self):
+        if self._embedding_entity is None:
+            raise NotTrainedError("Need to train model before accessing the model")

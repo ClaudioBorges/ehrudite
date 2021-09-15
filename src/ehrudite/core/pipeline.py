@@ -4,7 +4,7 @@
 import ehrpreper
 import ehrudite.core.text as er_text
 from ehrudite.core.embedding.skipgram import SkipgramModel
-from ehrudite.core.embedding.glove import GloVeModel
+from ehrudite.core.embedding.glove import GloveModel
 
 
 class EhruditePipeline:
@@ -29,7 +29,7 @@ class EhruditePipeline:
 
         pdb.set_trace()
 
-        # model = GloVeModel(embedding_size=300, context_size=10)
+        # model = GloveModel(embedding_size=300, context_size=10)
         # model.fit_to_corpus(repeatable_gen)
         # model.train(num_epochs=100)
 

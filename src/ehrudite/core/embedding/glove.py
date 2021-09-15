@@ -2,18 +2,20 @@
 
 from __future__ import division
 from collections import Counter, defaultdict
+from ehrudite.core.embedding import EmbeddingEntity
 from ehrudite.core.embedding import NotFitToCorpusError
 from ehrudite.core.embedding import NotTrainedError
 from random import shuffle
 import os
+import pickle
 import tensorflow as tf
 
 
-class GloVeModel:
+class GloveModel:
     def __init__(
         self,
-        embedding_size,
-        context_size,
+        embedding_size=128,
+        context_size=5,
         max_vocab_size=100000,
         min_occurrences=1,
         scaling_factor=3 / 4,
@@ -38,6 +40,7 @@ class GloVeModel:
         self.__word_to_id = None
         self.__cooccurrence_matrix = None
         self.__embeddings = None
+        self._embedding_entity = None
 
     def fit_to_corpus(self, corpus):
         self.__fit_to_corpus(
@@ -94,36 +97,50 @@ class GloVeModel:
             if should_write_summaries:
                 summary_writer.close()
 
+        self._embedding_entity = EmbeddingEntity(
+            self.__embeddings,
+            self.__words,
+            self.__word_to_id,
+        )
+
     def embedding_for_word(self, word):
-        return self.embeddings[self.__word_to_id[word]]
+        return self.embeddings[self.id_for_word(word)]
 
     def embedding_for_id(self, model_id):
         return self.embeddings[model_id]
 
     @property
     def vocab_size(self):
-        return len(self.__words)
+        return len(self.words)
 
     @property
     def words(self):
-        if self.__words is None:
-            raise NotFitToCorpusError(
-                "Need to fit model to corpus before accessing words."
-            )
-        return self.__words
+        self.__validate_train()
+        return self._embedding_entity.words
 
     @property
     def embeddings(self):
-        if self.__embeddings is None:
-            raise NotTrainedError("Need to train model before accessing embeddings")
-        return self.__embeddings
+        self.__validate_train()
+        return self._embedding_entity.embeddings
 
     def id_for_word(self, word):
-        if self.__word_to_id is None:
-            raise NotFitToCorpusError(
-                "Need to fit model to corpus before looking up word ids."
-            )
-        return self.__word_to_id[word]
+        self.__validate_train()
+        return self._embedding_entity.id_for_word[word]
+
+    def save(self, file_name):
+        with open(file_name, "wb") as f:
+            pickle.dump(self._embedding_entity, f)
+
+    @staticmethod
+    def load(file_name):
+        with open(file_name, "rb") as f:
+            model = GloveModel()
+            model._embedding_entity = pickle.load(f)
+            return model
+
+    def __validate_train(self):
+        if self._embedding_entity is None:
+            raise NotTrainedError("Need to train model before accessing the model")
 
     def generate_tsne(
         self, path=None, size=(100, 100), word_count=1000, embeddings=None
@@ -134,7 +151,7 @@ class GloVeModel:
 
         tsne = TSNE(perplexity=30, n_components=2, init="pca", n_iter=5000)
         low_dim_embs = tsne.fit_transform(embeddings[:word_count, :])
-        labels = self.words[:word_count]
+        labels = self.__words[:word_count]
         return _plot_with_labels(low_dim_embs, labels, path, size)
 
     def __fit_to_corpus(
@@ -169,6 +186,7 @@ class GloVeModel:
         }
 
     def __build_graph(self):
+        vocab_size = len(self.__words)
         self.__graph = tf.Graph()
         with self.__graph.as_default(), self.__graph.device(_device_for_node):
             count_max = tf.constant(
@@ -189,19 +207,19 @@ class GloVeModel:
             )
 
             focal_embeddings = tf.Variable(
-                tf.random.uniform([self.vocab_size, self.embedding_size], 1.0, -1.0),
+                tf.random.uniform([vocab_size, self.embedding_size], 1.0, -1.0),
                 name="focal_embeddings",
             )
             context_embeddings = tf.Variable(
-                tf.random.uniform([self.vocab_size, self.embedding_size], 1.0, -1.0),
+                tf.random.uniform([vocab_size, self.embedding_size], 1.0, -1.0),
                 name="context_embeddings",
             )
 
             focal_biases = tf.Variable(
-                tf.random.uniform([self.vocab_size], 1.0, -1.0), name="focal_biases"
+                tf.random.uniform([vocab_size], 1.0, -1.0), name="focal_biases"
             )
             context_biases = tf.Variable(
-                tf.random.uniform([self.vocab_size], 1.0, -1.0), name="context_biases"
+                tf.random.uniform([vocab_size], 1.0, -1.0), name="context_biases"
             )
 
             focal_embedding = tf.nn.embedding_lookup(
