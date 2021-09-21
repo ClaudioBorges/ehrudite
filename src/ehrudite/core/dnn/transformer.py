@@ -336,39 +336,28 @@ def _positional_encoding(position, d_model):
     return tf.cast(pos_encoding, dtype=tf.float32)
 
 
-class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+def optimizer(d_model):
     """Adam optimizer as of Section 5.3"""
 
-    def __init__(self, d_model, warmup_steps=4000):
-        super(CustomSchedule, self).__init__()
+    class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+        def __init__(self, d_model, warmup_steps=4000):
+            super(CustomSchedule, self).__init__()
 
-        self.d_model = d_model
-        self.d_model = tf.cast(self.d_model, tf.float32)
+            self.d_model = d_model
+            self.d_model = tf.cast(self.d_model, tf.float32)
 
-        self.warmup_steps = warmup_steps
+            self.warmup_steps = warmup_steps
 
-    def __call__(self, step):
-        arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
+        def __call__(self, step):
+            arg1 = tf.math.rsqrt(step)
+            arg2 = step * (self.warmup_steps ** -1.5)
 
-        return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+            return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
-
-def validate_custom_schedule():
-    import matplotlib.pyplot as plt
-
-    d_model = 512
     learning_rate = CustomSchedule(d_model)
-    optimizer = tf.keras.optimizers.Adam(
+    return tf.keras.optimizers.Adam(
         learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9
     )
-
-    temp_learning_rate_schedule = CustomSchedule(d_model)
-
-    plt.plot(temp_learning_rate_schedule(tf.range(40000, dtype=tf.float32)))
-    plt.ylabel("Learning Rate")
-    plt.xlabel("Train Step")
-    plt.show()
 
 
 def train():
@@ -411,7 +400,7 @@ def train():
     )
     checkpoint_path = "./checkpoints/train"
 
-    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=self.optimizer)
 
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
@@ -474,4 +463,7 @@ def train():
 
 
 if "__main__" == __name__:
-    validate_custom_schedule()
+    import pdb
+
+    pdb.set_trace()
+    train()

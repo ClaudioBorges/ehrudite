@@ -118,3 +118,9 @@ def test_transformer_model():
 
     fn_out, _ = sample_transformer([temp_input, temp_target], training=False)
     assert fn_out.shape == (batch_size, target_seq_len, target_vocab_size)
+
+
+def test_optimizer():
+    d_model = random.randint(128, 512)
+    optimizer = transformer.optimizer(d_model)
+    assert optimizer is not None
