@@ -35,12 +35,16 @@ class WordpieceTokenizer(tf_text.WordpieceTokenizer):
 
 
 def generate_vocab(ehrpreper_files, output_file_name, vocab_size=32000):
+    texts = ehrpreper.data_generator(*ehrpreper_files)
+    generate_vocab_from_texts(texts, output_file_name, vocab_size)
+
+
+def generate_vocab_from_texts(texts, output_file_name, vocab_size=32000):
     def write_vocab_file(filepath, vocab):
         with open(filepath, "w") as f:
             for token in vocab:
                 print(token, file=f)
 
-    texts = ehrpreper.data_generator(*ehrpreper_files)
     preprocessed = er_text.preprocess(texts)
     words = er_text.split_into_words(preprocessed)
 

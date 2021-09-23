@@ -10,16 +10,20 @@ import tensorflow_text as tf_text
 
 class SentencepieceTokenizer(tf_text.SentencepieceTokenizer):
     def __init__(self, model_file_name):
-        model = gfile.GFile((model_file_name), "rb").read()
+        model = gfile.GFile((f"{model_file_name}.model"), "rb").read()
         super(SentencepieceTokenizer, self).__init__(model=model)
 
 
-def generate_vocab(ehrpreper_files, output_file_name_prefix, vocab_size=32000):
+def generate_vocab(ehrpreper_files, output_file_name, vocab_size=32000):
     texts = ehrpreper.data_generator(*ehrpreper_files)
+    generate_vocab_from_texts(texts, output_file_name, vocab_size)
+
+
+def generate_vocab_from_texts(texts, output_file_name, vocab_size=32000):
     preprocessed = er_text.preprocess(texts)
 
     spm.SentencePieceTrainer.train(
         sentence_iterator=preprocessed,
-        model_prefix=output_file_name_prefix,
+        model_prefix=output_file_name,
         vocab_size=vocab_size,
     )

@@ -11,10 +11,9 @@ VOCABULARY_SIZE = 128
 
 def test_tokenizer_detokenizer():
     with tempfile.TemporaryDirectory() as dir_name:
-        output_prefix = f"{dir_name}/m"
-        sentencepiece.generate_vocab([MOCKED_EHRPREPER], output_prefix, VOCABULARY_SIZE)
-        model_file = f"{output_prefix}.model"
-        tokenizer = sentencepiece.SentencepieceTokenizer(model_file)
+        vocab_file = f"{dir_name}/vocab.txt"
+        sentencepiece.generate_vocab([MOCKED_EHRPREPER], vocab_file, VOCABULARY_SIZE)
+        tokenizer = sentencepiece.SentencepieceTokenizer(vocab_file)
 
         assert (
             VOCABULARY_SIZE * 0.7 <= tokenizer.vocab_size().numpy() <= VOCABULARY_SIZE

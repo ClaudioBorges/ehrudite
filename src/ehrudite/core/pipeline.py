@@ -12,6 +12,9 @@ class EhruditePipeline:
         self._ehrpreper_file = ehrpreper_file
         self._tokenizer = tokenizer
 
+    def _make_vocabulary(self, tokenizer, ehrpreper_files, output_path):
+        tokenizer.generate
+
     def _make_generator(self):
         sentences = self._make_contents()
         sequences = (

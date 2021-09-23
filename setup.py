@@ -47,7 +47,6 @@ setup(
         "configparser",
         "ehrpreper @ git+https://github.com/ClaudioBorges/ehrpreper.git",
         "matplotlib",
-        "numpy",
         "sentencepiece == 0.1.*",
         "tensorflow-text",
         "tensorflow",
