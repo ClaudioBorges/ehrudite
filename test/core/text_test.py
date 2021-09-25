@@ -27,21 +27,21 @@ def test_repeatable_generator():
     assert list(generator) == list(range(10))
 
 
-def test_progressable_generator():
+def test_lengthable_repeatable_generator():
     def f_generator(limit):
         return (i for i in range(limit))
 
-    generator = er_text.ProgressableGenerator(f_generator, limit=10)
-    assert list(generator) == list(range(10))
-    assert list(generator) == list(range(10))
-    assert list(generator()) == list(range(10))
-    assert list(generator()) == list(range(10))
+    length = 10
 
-    generator = er_text.ProgressableGenerator(f_generator, limit=10)
-    assert list(generator) == list(range(10))
-    assert list(generator) == list(range(10))
-    assert list(generator()) == list(range(10))
-    assert list(generator()) == list(range(10))
+    generator = er_text.LenghtableRepeatableGenerator(f_generator, limit=length)
+    assert len(generator) == length
+    assert list(generator) == list(range(length))
+
+    generator = er_text.LenghtableRepeatableGenerator(
+        f_generator, _length=length, limit=length
+    )
+    assert len(generator) == length
+    assert list(generator) == list(range(length))
 
 
 def test_split_into_words():

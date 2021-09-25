@@ -1,10 +1,18 @@
 """ehrudite pipeline"""
 
 
+from ehrudite.core.embedding.glove import GloveModel
+from ehrudite.core.embedding.skipgram import SkipgramModel
 import ehrpreper
 import ehrudite.core.text as er_text
-from ehrudite.core.embedding.skipgram import SkipgramModel
-from ehrudite.core.embedding.glove import GloveModel
+import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
+import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+import ipdb as pdb
+import logging
+import sklearn as skl
+import sklearn.model_selection as skl_msel
+import tensorflow as tf
+import tqdm
 
 
 class EhruditePipeline:
@@ -12,8 +20,11 @@ class EhruditePipeline:
         self._ehrpreper_file = ehrpreper_file
         self._tokenizer = tokenizer
 
-    def _make_vocabulary(self, tokenizer, ehrpreper_files, output_path):
-        tokenizer.generate
+    def _make_vocabulary(self, tokenizer, output_path, **kwargs):
+        tokenizer.generate_vocab_file_from_texts(texts, output_path, **kwargs)
+
+    def _split_train_test(self, documents):
+        pass
 
     def _make_generator(self):
         sentences = self._make_contents()
@@ -27,7 +38,7 @@ class EhruditePipeline:
                 break
 
     def _tf_run(self):
-        repeatable_gen = er_text.ProgressableGenerator(self._make_generator)
+        repeatable_gen = er_text.RepeatableGenerator(self._make_generator)
         import pdb
 
         pdb.set_trace()
@@ -62,6 +73,88 @@ class EhruditePipeline:
         # SentencePiece
         # Word2Vec
         pass
+
+    def _document_annotations_join(self, annotations, separator=" "):
+        return separator.join(annotations)
+
+    def _document_to_xy(self, documents):
+        return (
+            (
+                er_text.preprocess_text(document.content),
+                er_text.preprocess_text(
+                    self._document_annotations_join(document.annotations)
+                ),
+            )
+            for i, document in enumerate(documents)
+        )
+
+    def _data_xy_gen(self):
+        func = lambda: self._document_to_xy(
+            ehrpreper.document_entity_generator(self._ehrpreper_file)
+        )
+        return er_text.LenghtableRepeatableGenerator(func)
+
+    def _data_xy_k_fold_gen(self, n_splits=4):
+        data = self._data_xy_gen()
+        logging.info(f"_k_fold_gen (n_splits={n_splits}, data_len={len(data)})")
+        kf = skl_msel.KFold(n_splits=n_splits)
+        # Make indexes to be sure data can be a generator
+        source_idxs = [i for i in range(len(data))]
+        for i, (
+            train_idxs,
+            test_idxs,
+        ) in enumerate(kf.split(source_idxs)):
+            logging.debug(
+                f"Generating k-fold"
+                + f"(index={i}, len(train)={len(train_idxs)}, len(test)={len(test_idxs)}"
+            )
+
+            def _k_fold_data(data, idxs):
+                return (elm for idx, elm in enumerate(data) if idx in idxs)
+
+            train = er_text.LenghtableRepeatableGenerator(
+                _k_fold_data, _length=len(train_idxs), data=data, idxs=set(train_idxs)
+            )
+            test = er_text.LenghtableRepeatableGenerator(
+                _k_fold_data, _length=len(test_idxs), data=data, idxs=set(test_idxs)
+            )
+
+            yield (
+                train,
+                test,
+            )
+
+    def _make_document_k_fold_xy_ds(self):
+        generator = self._data_xy_k_fold_gen()
+        return tf.data.Dataset.from_generator(
+            generator,
+            output_signature=(
+                tf.TensorSpec(shape=(), dtype=tf.string),
+                tf.TensorSpec(shape=(), dtype=tf.string),
+            ),
+        )
+
+    def _document_to_tuple(self, documents):
+        return (
+            (
+                document.content,
+                document.annotations,
+            )
+            for document in documents
+        )
+
+    def _make_document_ds(self):
+        func = lambda: self._document_to_tuple(
+            ehrpreper.document_entity_generator(self._ehrpreper_file)
+        )
+        generator = er_text.RepeatableGenerator(func)
+        return tf.data.Dataset.from_generator(
+            generator,
+            output_signature=(
+                tf.TensorSpec(shape=(), dtype=tf.string),
+                tf.TensorSpec(shape=(None,), dtype=tf.string),
+            ),
+        )
 
     def _make_contents(self):
         texts = ehrpreper.data_generator(self._ehrpreper_file)
@@ -118,20 +211,69 @@ class EhruditePipeline:
         )
 
 
+def _unpack_data_xy(data):
+    def _extract_pos(pos):
+        return (elm[pos] for elm in data)
+
+    return (
+        er_text.LenghtableRepeatableGenerator(_extract_pos, _length=len(data), pos=0),
+        er_text.LenghtableRepeatableGenerator(_extract_pos, _length=len(data), pos=1),
+    )
+
+
+def run(run_id, train_xy, test_xy):
+    train_x, train_y = _unpack_data_xy(train_xy)
+
+    pdb.set_trace()
+
+    # Sentencepiece Tokenize
+    sentencepiece.generate_vocab_from_texts(
+        (elm for elm in tqdm.tqdm(iterable=train_x)),
+        f"train_x_{run_id}",
+        vocab_size=8192,
+    )
+    sentencepiece.generate_vocab_from_texts(
+        (elm for elm in tqdm.tqdm(iterable=train_y)),
+        f"train_y_{run_id}",
+        vocab_size=256,
+    )
+    # Wordpiece Tokenize
+    wordpiece.generate_vocab_from_texts(
+        (elm for elm in tqdm.tqdm(iterable=train_x)),
+        f"train_x_{run_id}",
+        vocab_size=8192,
+    )
+    wordpiece.generate_vocab_from_texts(
+        (elm for elm in tqdm.tqdm(iterable=train_y)),
+        f"train_y_{run_id}",
+        vocab_size=256,
+    )
+
+    # Here
+    pass
+
+
 # [TODO] debug
 if __name__ == "__main__":
-    import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
-    import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+    import ehrudite.cli.base as cli_base
 
-    import tensorflow as tf
+    cli_base.config_logging(3)
 
     ehrpreper_file = "/Users/clborges/Mestrado/code/data/ehrpreper.xml"
-    tokenizer = sentencepiece.SentencepieceTokenizer(
-        "/Users/clborges/Mestrado/code/data/tok/sentencepiece/sentencepiece.model"
-    )
+    # tokenizer = sentencepiece.SentencepieceTokenizer(
+    #    "/Users/clborges/Mestrado/code/data/tok/sentencepiece/sentencepiece.model"
+    # )
     # tokenizer = wordpiece.WordpieceTokenizer(
     #    "/Users/clborges/Mestrado/code/data/tok/wordpiece/wordpiece.vocab"
     # )
 
-    ehr = EhruditePipeline(ehrpreper_file, tokenizer)
-    ehr.run()
+    ehr = EhruditePipeline(ehrpreper_file, None)
+
+    for run_id, (
+        train_xy,
+        test_xy,
+    ) in enumerate(ehr._data_xy_k_fold_gen()):
+        run(run_id, train_xy, test_xy)
+        break
+
+    print("End")

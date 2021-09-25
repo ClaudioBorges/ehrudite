@@ -26,4 +26,6 @@ def generate_vocab_from_texts(texts, output_file_name, vocab_size=32000):
         sentence_iterator=preprocessed,
         model_prefix=output_file_name,
         vocab_size=vocab_size,
+        pad_id=3,
+        max_sentence_length=2 ** 18,
     )

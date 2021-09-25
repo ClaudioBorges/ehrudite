@@ -14,8 +14,8 @@ class Generator:
 
 
 class RepeatableGenerator:
-    def __init__(self, func_generator, **kwargs):
-        self._func_generator = func_generator
+    def __init__(self, _func_generator, **kwargs):
+        self._func_generator = _func_generator
         self._kwargs = kwargs
         self._generator = self._make_generator()
 
@@ -36,9 +36,17 @@ class RepeatableGenerator:
         return self._make_generator()
 
 
+class LenghtableRepeatableGenerator(RepeatableGenerator):
+    def __init__(self, _func_generator, _length=None, **kwargs):
+        super(LenghtableRepeatableGenerator, self).__init__(_func_generator, **kwargs)
+        self._len = _length if _length else sum([1 for _ in self._make_generator()])
+
+    def __len__(self):
+        return self._len
+
+
 class ProgressableGenerator(RepeatableGenerator):
     def __init__(self, func_generator, n_items=None, **kwargs):
-        self._n_items = n_items
         self._last_progressable = None
         super(ProgressableGenerator, self).__init__(func_generator, **kwargs)
 
@@ -55,18 +63,21 @@ class ProgressableGenerator(RepeatableGenerator):
         raise NotImplemented
 
 
-def preprocess(texts, to_lower=True, remove_split_lines=True):
+def preprocess_text(text, to_lower=True, remove_split_lines=True):
     def _remove_split_lines(text):
         lines = text.splitlines()
         chunks = [line.strip() for line in lines if len(line) != 0]
         return " ".join(chunks)
 
-    for text in texts:
-        text_step_1 = text.lower() if to_lower else text
-        text_step_2 = (
-            _remove_split_lines(text_step_1) if remove_split_lines else text_step_1
-        )
-        yield text_step_2
+    text_step_1 = text.lower() if to_lower else text
+    text_step_2 = (
+        _remove_split_lines(text_step_1) if remove_split_lines else text_step_1
+    )
+    return text_step_2
+
+
+def preprocess(texts, **kwargs):
+    return (preprocess_text(text, **kwargs) for text in texts)
 
 
 def split_into_words(texts):
