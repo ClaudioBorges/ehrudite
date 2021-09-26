@@ -15,6 +15,7 @@ import sklearn.model_selection as skl_msel
 import tensorflow as tf
 import tqdm
 
+ehr_data_path = '../ehr-data/'
 
 class EhruditePipeline:
     def __init__(self, ehrpreper_file, tokenizer):
@@ -228,7 +229,7 @@ def run(run_id, train_xy, test_xy):
 
     train_x, train_y = _unpack_data_xy(train_xy)
 
-    base_path = '../'
+    base_path = ehr_data_path
     vocab_size_x = 2**14
     vocab_size_y = 2**9
     tokenizer_base_path = os.path.join(base_path, 'tokenizer/')
@@ -254,7 +255,7 @@ if __name__ == "__main__":
 
     cli_base.config_logging(3)
 
-    ehrpreper_file = "/Users/clborges/Mestrado/code/data/ehrpreper.xml"
+    ehrpreper_file = os.path.join(ehr_data_path, "ehrpreper.xml")
     # tokenizer = sentencepiece.SentencepieceTokenizer(
     #    "/Users/clborges/Mestrado/code/data/tok/sentencepiece/sentencepiece.model"
     # )
