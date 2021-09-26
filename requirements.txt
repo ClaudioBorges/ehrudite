@@ -1,3 +1,5 @@
+# Force numpy as tensorflow
+numpy~=1.19.2
 configparser
 git+https://github.com/ClaudioBorges/ehrpreper.git
 matplotlib
