@@ -9,6 +9,7 @@ import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
 import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
 import ipdb as pdb
 import logging
+import os
 import sklearn as skl
 import sklearn.model_selection as skl_msel
 import tensorflow as tf
@@ -222,35 +223,29 @@ def _unpack_data_xy(data):
 
 
 def run(run_id, train_xy, test_xy):
+    def _wrap_with_tqdm(iterable):
+        return (i for i in tqdm.tqdm(iterable=iterable))
+
     train_x, train_y = _unpack_data_xy(train_xy)
 
-    pdb.set_trace()
+    base_path = '../'
+    vocab_size_x = 2**14
+    vocab_size_y = 2**9
+    tokenizer_base_path = os.path.join(base_path, 'tokenizer/')
+    train_x_id = f"train_x_{run_id}"
+    train_y_id = f"train_y_{run_id}"
 
     # Sentencepiece Tokenize
-    sentencepiece.generate_vocab_from_texts(
-        (elm for elm in tqdm.tqdm(iterable=train_x)),
-        f"train_x_{run_id}",
-        vocab_size=8192,
-    )
-    sentencepiece.generate_vocab_from_texts(
-        (elm for elm in tqdm.tqdm(iterable=train_y)),
-        f"train_y_{run_id}",
-        vocab_size=256,
-    )
-    # Wordpiece Tokenize
-    wordpiece.generate_vocab_from_texts(
-        (elm for elm in tqdm.tqdm(iterable=train_x)),
-        f"train_x_{run_id}",
-        vocab_size=8192,
-    )
-    wordpiece.generate_vocab_from_texts(
-        (elm for elm in tqdm.tqdm(iterable=train_y)),
-        f"train_y_{run_id}",
-        vocab_size=256,
-    )
+    sentencepiece_base_path = os.path.join(tokenizer_base_path, 'sentencepiece/')
+    sentencepiece_x_y = (os.path.join(sentencepiece_base_path, train_x_id), os.path.join(sentencepiece_base_path, train_y_id))
+    sentencepiece.generate_vocab_from_texts(_wrap_with_tqdm(train_x), sentencepiece_x_y[0], vocab_size=vocab_size_x)
+    sentencepiece.generate_vocab_from_texts(_wrap_with_tqdm(train_y), sentencepiece_x_y[1], vocab_size=vocab_size_y)
 
-    # Here
-    pass
+    # Wordpiece Tokenize
+    wordpiece_base_path = os.path.join(tokenizer_base_path, 'wordpiece/')
+    wordpiece_x_y = (os.path.join(wordpiece_base_path, train_x_id), os.path.join(wordpiece_base_path, train_y_id))
+    wordpiece.generate_vocab_from_texts(_wrap_with_tqdm(train_x), wordpiece_x_y[0], vocab_size=vocab_size_x)
+    wordpiece.generate_vocab_from_texts(_wrap_with_tqdm(train_y), wordpiece_x_y[1], vocab_size=vocab_size_y)
 
 
 # [TODO] debug
@@ -268,12 +263,10 @@ if __name__ == "__main__":
     # )
 
     ehr = EhruditePipeline(ehrpreper_file, None)
-
     for run_id, (
         train_xy,
         test_xy,
     ) in enumerate(ehr._data_xy_k_fold_gen()):
         run(run_id, train_xy, test_xy)
-        break
 
     print("End")
