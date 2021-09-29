@@ -4,18 +4,24 @@
 from ehrudite.core.embedding.glove import GloveModel
 from ehrudite.core.embedding.skipgram import SkipgramModel
 import ehrpreper
+import ehrudite.core.dnn.transformer as transformer_m
 import ehrudite.core.text as er_text
 import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
 import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
 import ipdb as pdb
 import logging
 import os
-import sklearn as skl
 import sklearn.model_selection as skl_msel
 import tensorflow as tf
+import time
 import tqdm
 
-ehr_data_path = '../ehr-data/'
+ehr_data_path = "../ehr-data/"
+tokenizer_base_path = os.path.join(ehr_data_path, "tokenizer/")
+sentencepiece_base_path = os.path.join(tokenizer_base_path, "sentencepiece/")
+wordpiece_base_path = os.path.join(tokenizer_base_path, "wordpiece/")
+checkpoint_path = os.path.join(ehr_data_path, "checkpoint/train")
+
 
 class EhruditePipeline:
     def __init__(self, ehrpreper_file, tokenizer):
@@ -41,9 +47,6 @@ class EhruditePipeline:
 
     def _tf_run(self):
         repeatable_gen = er_text.RepeatableGenerator(self._make_generator)
-        import pdb
-
-        pdb.set_trace()
 
         # model = GloveModel(embedding_size=300, context_size=10)
         # model.fit_to_corpus(repeatable_gen)
@@ -223,30 +226,206 @@ def _unpack_data_xy(data):
     )
 
 
-def run(run_id, train_xy, test_xy):
-    def _wrap_with_tqdm(iterable):
-        return (i for i in tqdm.tqdm(iterable=iterable))
+def _wrap_with_tqdm(iterable):
+    return (i for i in tqdm.tqdm(iterable=iterable))
 
+
+def _train_tokenizer(run_id, train_xy, test_xy):
     train_x, train_y = _unpack_data_xy(train_xy)
 
-    base_path = ehr_data_path
-    vocab_size_x = 2**14
-    vocab_size_y = 2**9
-    tokenizer_base_path = os.path.join(base_path, 'tokenizer/')
+    vocab_size_x = 2 ** 14
+    vocab_size_y = 2 ** 9
     train_x_id = f"train_x_{run_id}"
     train_y_id = f"train_y_{run_id}"
 
     # Sentencepiece Tokenize
-    sentencepiece_base_path = os.path.join(tokenizer_base_path, 'sentencepiece/')
-    sentencepiece_x_y = (os.path.join(sentencepiece_base_path, train_x_id), os.path.join(sentencepiece_base_path, train_y_id))
-    sentencepiece.generate_vocab_from_texts(_wrap_with_tqdm(train_x), sentencepiece_x_y[0], vocab_size=vocab_size_x)
-    sentencepiece.generate_vocab_from_texts(_wrap_with_tqdm(train_y), sentencepiece_x_y[1], vocab_size=vocab_size_y)
+    sentencepiece_x_y = (
+        os.path.join(sentencepiece_base_path, train_x_id),
+        os.path.join(sentencepiece_base_path, train_y_id),
+    )
+    sentencepiece.generate_vocab_from_texts(
+        _wrap_with_tqdm(train_x), sentencepiece_x_y[0], vocab_size=vocab_size_x
+    )
+    sentencepiece.generate_vocab_from_texts(
+        _wrap_with_tqdm(train_y), sentencepiece_x_y[1], vocab_size=vocab_size_y
+    )
 
     # Wordpiece Tokenize
-    wordpiece_base_path = os.path.join(tokenizer_base_path, 'wordpiece/')
-    wordpiece_x_y = (os.path.join(wordpiece_base_path, train_x_id), os.path.join(wordpiece_base_path, train_y_id))
-    wordpiece.generate_vocab_from_texts(_wrap_with_tqdm(train_x), wordpiece_x_y[0], vocab_size=vocab_size_x)
-    wordpiece.generate_vocab_from_texts(_wrap_with_tqdm(train_y), wordpiece_x_y[1], vocab_size=vocab_size_y)
+    wordpiece_x_y = (
+        os.path.join(wordpiece_base_path, train_x_id),
+        os.path.join(wordpiece_base_path, train_y_id),
+    )
+    wordpiece.generate_vocab_from_texts(
+        _wrap_with_tqdm(train_x), wordpiece_x_y[0], vocab_size=vocab_size_x
+    )
+    wordpiece.generate_vocab_from_texts(
+        _wrap_with_tqdm(train_y), wordpiece_x_y[1], vocab_size=vocab_size_y
+    )
+
+
+def _train_model(run_id, train_xy, test_xy):
+    train_x, train_y = _unpack_data_xy(train_xy)
+
+    train_x_id = f"train_x_{run_id}"
+    train_y_id = f"train_y_{run_id}"
+
+    # [TODO] Use wordpiece
+    tok_input = wordpiece.WordpieceTokenizer(
+        os.path.join(wordpiece_base_path, train_x_id)
+    )
+    tok_target = wordpiece.WordpieceTokenizer(
+        os.path.join(wordpiece_base_path, train_y_id)
+    )
+
+    MAX_LENGTH = 512
+    PAD_VAL = 0
+
+    def _prepare_gen():
+        def _normalize(sequences):
+            return tf.keras.preprocessing.sequence.pad_sequences(
+                sequences,
+                maxlen=MAX_LENGTH,
+                padding="post",
+                truncating="post",
+                value=PAD_VAL,
+            )
+
+        train_x_tok = (tok_input.tokenize(x) for x in train_x)
+        train_y_tok = (tok_target.tokenize(y) for y in train_y)
+
+        norm = (_normalize((x, y)) for x, y in zip(train_x_tok, train_y_tok))
+        return ((tf.constant(seqs[0]), tf.constant(seqs[1])) for seqs in norm)
+
+    train_xy_tok_gen = er_text.RepeatableGenerator(_prepare_gen)
+
+    train_xy_tok_ds = tf.data.Dataset.from_generator(
+        train_xy_tok_gen,
+        output_signature=(
+            tf.TensorSpec(shape=(None,), dtype=tf.int64),
+            tf.TensorSpec(shape=(None,), dtype=tf.int64),
+        ),
+    )
+
+    BUFFER_SIZE = 128  # 20000
+    BATCH_SIZE = 64
+
+    def make_batches(ds):
+        return (
+            ds.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+        )
+
+    train_batches = make_batches(train_xy_tok_ds)
+    pdb.set_trace()
+
+    # From https://www.tensorflow.org/text/tutorials/transformer
+    num_layers = 4
+    d_model = 128
+    dff = 512
+    num_heads = 8
+    dropout_rate = 0.1
+
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+        from_logits=True, reduction="none"
+    )
+
+    def loss_function(real, pred):
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        loss_ = loss_object(real, pred)
+
+        mask = tf.cast(mask, dtype=loss_.dtype)
+        loss_ *= mask
+
+        return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+
+    def accuracy_function(real, pred):
+        accuracies = tf.equal(real, tf.argmax(pred, axis=2))
+
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        accuracies = tf.math.logical_and(mask, accuracies)
+
+        accuracies = tf.cast(accuracies, dtype=tf.float32)
+        mask = tf.cast(mask, dtype=tf.float32)
+        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
+
+    train_loss = tf.keras.metrics.Mean(name="train_loss")
+    train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
+
+    transformer = transformer_m.Transformer(
+        num_layers=num_layers,
+        d_model=d_model,
+        num_heads=num_heads,
+        dff=dff,
+        input_vocab_size=tok_input.vocab_size(),
+        target_vocab_size=tok_target.vocab_size(),
+        pe_input=1000,
+        pe_target=1000,
+        rate=dropout_rate,
+    )
+
+    optimizer = transformer_m.optimizer(d_model)
+
+    ckpt = tf.train.Checkpoint(
+        transformer=transformer, optimizer=optimizer
+    )
+
+    ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+
+    # if a checkpoint exists, restore the latest checkpoint.
+    if ckpt_manager.latest_checkpoint:
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print("Latest checkpoint restored!!")
+
+    EPOCHS = 20
+    # The @tf.function trace-compiles train_step into a TF graph for faster
+    # execution. The function specializes to the precise shape of the argument
+    # tensors. To avoid re-tracing due to the variable sequence lengths or variable
+    # batch sizes (the last batch is smaller), use input_signature to specify
+    # more generic shapes.
+
+    train_step_signature = [
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+    ]
+
+    @tf.function(input_signature=train_step_signature)
+    def train_step(inp, tar):
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+
+        with tf.GradientTape() as tape:
+            predictions, _ = transformer([inp, tar_inp], training=True)
+            loss = loss_function(tar_real, predictions)
+
+        gradients = tape.gradient(loss, transformer.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+        train_loss(loss)
+        train_accuracy(accuracy_function(tar_real, predictions))
+
+    for epoch in range(EPOCHS):
+        start = time.time()
+
+        train_loss.reset_states()
+        train_accuracy.reset_states()
+
+        # inp -> portuguese, tar -> english
+        for (batch, (inp, tar)) in enumerate(train_batches):
+            train_step(inp, tar)
+
+            if batch % 50 == 0:
+                print(
+                    f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                )
+
+        if (epoch + 1) % 5 == 0:
+            ckpt_save_path = ckpt_manager.save()
+            print(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
+
+        print(
+            f"Epoch {epoch + 1} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+        )
+
+        print(f"Time taken for 1 epoch: {time.time() - start:.2f} secs\n")
 
 
 # [TODO] debug
@@ -256,18 +435,13 @@ if __name__ == "__main__":
     cli_base.config_logging(3)
 
     ehrpreper_file = os.path.join(ehr_data_path, "ehrpreper.xml")
-    # tokenizer = sentencepiece.SentencepieceTokenizer(
-    #    "/Users/clborges/Mestrado/code/data/tok/sentencepiece/sentencepiece.model"
-    # )
-    # tokenizer = wordpiece.WordpieceTokenizer(
-    #    "/Users/clborges/Mestrado/code/data/tok/wordpiece/wordpiece.vocab"
-    # )
 
     ehr = EhruditePipeline(ehrpreper_file, None)
     for run_id, (
         train_xy,
         test_xy,
     ) in enumerate(ehr._data_xy_k_fold_gen()):
-        run(run_id, train_xy, test_xy)
+        # _train_tokenizer(run_id, train_xy, test_xy)
+        _train_model(run_id, train_xy, test_xy)
 
     print("End")
