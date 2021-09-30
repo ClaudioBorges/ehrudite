@@ -10,7 +10,16 @@ import tensorflow as tf
 import tensorflow_text as tf_text
 
 
-RESERVED_TOKES = ["[PAD]", "[UNK]", "[START]", "[END]"]
+# To keep ehrudite tokenizer consistent, the special symbols are:
+#  --------------------------------------------
+# | Text  | Token Value | Description          |
+# |-------|-------------|----------------------|
+# | <pad> |      0      | Padding              |
+# | <s>   |      1      | Begining of sentence |
+# | </s>  |      2      | End of sentence      |
+# | <unk> |      3      | Unknwon              |
+#  --------------------------------------------
+RESERVED_TOKES = ["<pad>", "<s>", "</s>", "<unk>"]
 
 
 class WordpieceTokenizer(tf_text.WordpieceTokenizer):
