@@ -8,14 +8,14 @@ import tensorflow as tf
 import tensorflow_text as tf_text
 
 # To keep ehrudite tokenizer consistent, the special symbols are:
-#  --------------------------------------------
+# +--------------------------------------------+
 # | Text  | Token Value | Description          |
-# |-------|-------------|----------------------|
+# +-------+-------------+----------------------+
 # | <pad> |      0      | Padding              |
 # | <s>   |      1      | Begining of sentence |
 # | </s>  |      2      | End of sentence      |
 # | <unk> |      3      | Unknwon              |
-#  --------------------------------------------
+# +-------+-------------+----------------------+
 
 
 class SentencepieceTokenizer(tf_text.SentencepieceTokenizer):
