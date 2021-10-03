@@ -6,15 +6,12 @@ import logging
 
 def make_parser():
     parser = ArgumentParser(
-        description="A deep learning (DL) framework for electronic health records (EHR)",
+        description="A deep learning (DL) framework for electronic health records (EHR)"
+        + "\nUse: "
+        + "\n  ehrudite-pip   - to run a DL pipeline"
+        + "\n  ehrudite-stat  - to create statistic"
+        + "\n  ehrudite-tok   - to tokenize an input",
         formatter_class=RawTextHelpFormatter,
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help=r"increse output verbosity",
     )
     return parser
 
@@ -22,7 +19,3 @@ def make_parser():
 def cli():
     parser = make_parser()
     args = parser.parse_args()
-    cli_base.config_logging(args.verbose)
-
-    logging.info("Started")
-    logging.info("Finished")

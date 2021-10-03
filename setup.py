@@ -58,6 +58,7 @@ setup(
     entry_points={
         "console_scripts": [
             "ehrudite = ehrudite.cli:cli",
+            "ehrudite-pip = ehrudite.cli.pipeline:cli",
             "ehrudite-stat = ehrudite.cli.statistic:cli",
             "ehrudite-tok = ehrudite.cli.tokenizer:cli",
         ],
