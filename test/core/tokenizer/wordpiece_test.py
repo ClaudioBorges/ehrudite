@@ -1,7 +1,7 @@
 """The test file for wordpiece tokenizer"""
 
 import ehrudite.core.text as er_text
-import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+import ehrudite.core.tokenizer.wordpiece as wordpiece
 import tempfile
 
 

@@ -2,8 +2,8 @@ from argparse import ArgumentParser
 from argparse import RawTextHelpFormatter
 import ehrudite.cli.base as cli_base
 import ehrudite.core.statistic as stat
-import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
-import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+import ehrudite.core.tokenizer.sentencepiece as sentencepiece
+import ehrudite.core.tokenizer.wordpiece as wordpiece
 import logging
 
 SENTENCE_PIECE = "sentencepiece"

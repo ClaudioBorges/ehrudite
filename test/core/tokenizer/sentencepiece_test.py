@@ -1,7 +1,7 @@
 """The test file for sentencepiece tokenizer"""
 
 import ehrudite.core.text as er_text
-import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
+import ehrudite.core.tokenizer.sentencepiece as sentencepiece
 import tempfile
 
 

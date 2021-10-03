@@ -26,6 +26,12 @@ Y_MAX_LEN = 128
 BUFFER_SIZE = 128  # 20000
 BATCH_SIZE = 64
 EPOCHS = 20
+# From https://www.tensorflow.org/text/tutorials/transformer
+NUM_LAYERS = 4
+D_MODEL = 128
+DFF = 512
+NUM_HEADS = 8
+DROPOUT_RATE = 0.1
 
 
 def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
@@ -72,13 +78,6 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
 
     train_batches = make_batches(train_xy_tok_ds)
 
-    # From https://www.tensorflow.org/text/tutorials/transformer
-    num_layers = 4
-    d_model = 128
-    dff = 512
-    num_heads = 8
-    dropout_rate = 0.1
-
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
     )
@@ -106,15 +105,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
 
     transformer = transformer_m.Transformer(
-        num_layers=num_layers,
-        d_model=d_model,
-        num_heads=num_heads,
-        dff=dff,
+        num_layers=NUM_LAYERS,
+        d_model=D_MODEL,
+        num_heads=NUM_HEADS,
+        dff=DFF,
         input_vocab_size=tok_x.vocab_size(),
         target_vocab_size=tok_y.vocab_size(),
         pe_input=X_MAX_LEN,
         pe_target=Y_MAX_LEN,
-        rate=dropout_rate,
+        rate=DROPOUT_RATE,
     )
 
     optimizer = transformer_m.optimizer(d_model)

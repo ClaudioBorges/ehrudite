@@ -3,8 +3,8 @@
 from tqdm import tqdm
 import ehrpreper
 import ehrudite.core.text as er_text
-import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
-import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+import ehrudite.core.tokenizer.sentencepiece as sentencepiece
+import ehrudite.core.tokenizer.wordpiece as wordpiece
 import logging
 import matplotlib.pyplot as plt
 import numpy as np

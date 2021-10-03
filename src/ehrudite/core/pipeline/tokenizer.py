@@ -6,8 +6,8 @@ from ehrudite.core.pipeline import make_progressable
 from ehrudite.core.pipeline import unpack_2d
 from enum import Enum
 import ehrudite.core.text as er_text
-import ehrudite.core.tokenizer.sentencepiece_tokenizer as sentencepiece
-import ehrudite.core.tokenizer.wordpiece_tokenizer as wordpiece
+import ehrudite.core.tokenizer.sentencepiece as sentencepiece
+import ehrudite.core.tokenizer.wordpiece as wordpiece
 import logging
 import os
 
