@@ -24,12 +24,12 @@ MODEL_LSTM_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_xfmr/
 X_MAX_LEN = 1024
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128  # 20000
-BATCH_SIZE = 64
+BATCH_SIZE = 8 # 64
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
 NUM_LAYERS = 4
 D_MODEL = 128
-DFF = 512
+DFF = 1024
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
@@ -116,7 +116,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
         rate=DROPOUT_RATE,
     )
 
-    optimizer = transformer_m.optimizer(d_model)
+    optimizer = transformer_m.optimizer(D_MODEL)
 
     ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
 
