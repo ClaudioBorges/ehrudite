@@ -463,7 +463,4 @@ def train():
 
 
 if "__main__" == __name__:
-    import pdb
-
-    pdb.set_trace()
     train()

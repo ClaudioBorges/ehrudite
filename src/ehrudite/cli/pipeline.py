@@ -66,9 +66,6 @@ def cli():
     ehrpreper_file = os.path.join(args.ehr_data_path, EHRPREPER_FILENAME)
     k_folded = ehrpreper_k_fold_gen(ehrpreper_file, n_splits=args.n_splits)
 
-    import pdb
-
-    pdb.set_trace()
     for run_id, (
         train_xy,
         test_xy,
