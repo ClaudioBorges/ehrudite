@@ -31,6 +31,12 @@ def make_parser():
         help=r"train transformer-transformer",
     )
     parser.add_argument(
+        "-t",
+        "--test",
+        action="store_true",
+        help=r"run tests",
+    )
+    parser.add_argument(
         "-n",
         "--n_splits",
         action="store",
@@ -80,11 +86,8 @@ def cli():
                     train_xy,
                 )
             if args.pipeline_xfmr_xfmr:
-                if False:
-                    translator = pip_dnn.Translator(run_id, tokenizer_type)
-                    translated_text, translated_tokens, attention_weights = translator(
-                        "asd"
-                    )
+                if args.test:
+                    run_tests(run_id, tokenizer_type, train_xy, test_xy)
                     return
                 else:
                     pip_dnn.train_xfmr_xfmr(
@@ -95,3 +98,16 @@ def cli():
                     )
 
     logging.info("Finished")
+
+
+def run_tests(run_id, tokenizer_type, train_xy, test_xy):
+    translator = pip_dnn.Translator(run_id, tokenizer_type)
+    for (i, (x, y)) in enumerate(train_xy):
+        print("START")
+        print(f"Iteration (i={i})")
+        print(f"Input X={x}")
+        print(f"Input Y={y}")
+        translated_text, translated_tokens, attention_weights = translator(x)
+        print(f"text={translated_text}, tokens={translated_tokens}")
+        print("END")
+    return

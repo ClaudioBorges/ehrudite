@@ -86,10 +86,10 @@ class Translator(tf.Module):
     def __call__(self, sentence):
         # Input sentence is the EHR, hence preparing with BOS and EOS
         sequence = self.tok_x.tokenize(sentence)
-        encoder_input = normalize(sequence, X_MAX_LEN)
+        encoder_input = normalize(sequence, X_MAX_LEN)[tf.newaxis]
 
-        bos_token = tf.constant([pip_tok.BOS_TOK], dtype=tf.int64)[tf.newaxis]
-        eos_token = tf.constant([pip_tok.EOS_TOK], dtype=tf.int64)[tf.newaxis]
+        bos_token = tf.constant(pip_tok.BOS_TOK, dtype=tf.int64)[tf.newaxis]
+        eos_token = tf.constant(pip_tok.EOS_TOK, dtype=tf.int64)[tf.newaxis]
 
         # `tf.TensorArray` is required here (instead of a python list) so that the
         # dynamic-loop can be traced by `tf.function`.
@@ -101,7 +101,7 @@ class Translator(tf.Module):
             predictions, _ = self.transformer([encoder_input, output], training=False)
 
             # select the last token from the seq_len dimension
-            predictions = predictions[:, -1, :]  # (batch_size, 1, vocab_size)
+            predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)
             predicted_id = tf.argmax(predictions, axis=-1)
 
             # concatenate the predicted_id to the output which is given to the decoder
@@ -113,6 +113,8 @@ class Translator(tf.Module):
 
         output = tf.transpose(output_array.stack())
         # output.shape(1, tokens)
+        print("AQUI")
+        print(output)
         text = self.tok_y.detokenize(output)[0]  # shape: ()
 
         tokens = self.tok_y.lookup(output)[0]
