@@ -80,11 +80,18 @@ def cli():
                     train_xy,
                 )
             if args.pipeline_xfmr_xfmr:
-                pip_dnn.train_xfmr_xfmr(
-                    run_id,
-                    tokenizer_type,
-                    train_xy,
-                    test_xy,
-                )
+                if False:
+                    translator = pip_dnn.Translator(run_id, tokenizer_type)
+                    translated_text, translated_tokens, attention_weights = translator(
+                        "asd"
+                    )
+                    return
+                else:
+                    pip_dnn.train_xfmr_xfmr(
+                        run_id,
+                        tokenizer_type,
+                        train_xy,
+                        test_xy,
+                    )
 
     logging.info("Finished")

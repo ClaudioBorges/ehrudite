@@ -24,7 +24,7 @@ MODEL_LSTM_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_xfmr/
 X_MAX_LEN = 1024
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128  # 20000
-BATCH_SIZE = 8 # 64
+BATCH_SIZE = 8  # 64
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
 NUM_LAYERS = 4
@@ -34,23 +34,104 @@ NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 
+def normalize(sequence, max_length):
+    sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
+    enclosed = tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
+    padded = tf.keras.preprocessing.sequence.pad_sequences(
+        [enclosed],
+        maxlen=max_length,
+        padding="post",
+        truncating="post",
+        value=pip_tok.PAD_TOK,
+    )[0]
+    return tf.constant(padded)
+
+
+def restore_or_init(vocab_size_x, vocab_size_y):
+    transformer = transformer_m.Transformer(
+        num_layers=NUM_LAYERS,
+        d_model=D_MODEL,
+        num_heads=NUM_HEADS,
+        dff=DFF,
+        input_vocab_size=vocab_size_x,
+        target_vocab_size=vocab_size_y,
+        pe_input=X_MAX_LEN,
+        pe_target=Y_MAX_LEN,
+        rate=DROPOUT_RATE,
+    )
+
+    optimizer = transformer_m.optimizer(D_MODEL)
+    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+    ckpt_manager = tf.train.CheckpointManager(
+        ckpt, MODEL_XFMR_XFMR_BASE_PATH, max_to_keep=5
+    )
+    # if a checkpoint exists, restore the latest checkpoint.
+    if ckpt_manager.latest_checkpoint:
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print("Latest checkpoint restored!!")
+
+    return (
+        transformer,
+        optimizer,
+    )
+
+
+class Translator(tf.Module):
+    def __init__(self, run_id, tokenizer_type):
+        self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
+        self.transformer, _ = restore_or_init(
+            self.tok_x.vocab_size(), self.tok_y.vocab_size()
+        )
+
+    def __call__(self, sentence):
+        # Input sentence is the EHR, hence preparing with BOS and EOS
+        sequence = self.tok_x.tokenize(sentence)
+        encoder_input = normalize(sequence, X_MAX_LEN)
+
+        bos_token = tf.constant([pip_tok.BOS_TOK], dtype=tf.int64)[tf.newaxis]
+        eos_token = tf.constant([pip_tok.EOS_TOK], dtype=tf.int64)[tf.newaxis]
+
+        # `tf.TensorArray` is required here (instead of a python list) so that the
+        # dynamic-loop can be traced by `tf.function`.
+        output_array = tf.TensorArray(dtype=tf.int64, size=0, dynamic_size=True)
+        output_array = output_array.write(0, bos_token)
+
+        for i in tf.range(Y_MAX_LEN):
+            output = tf.transpose(output_array.stack())
+            predictions, _ = self.transformer([encoder_input, output], training=False)
+
+            # select the last token from the seq_len dimension
+            predictions = predictions[:, -1, :]  # (batch_size, 1, vocab_size)
+            predicted_id = tf.argmax(predictions, axis=-1)
+
+            # concatenate the predicted_id to the output which is given to the decoder
+            # as its input
+            output_array = output_array.write(i + 1, predicted_id[0])
+
+            if predicted_id == eos_token:
+                break
+
+        output = tf.transpose(output_array.stack())
+        # output.shape(1, tokens)
+        text = self.tok_y.detokenize(output)[0]  # shape: ()
+
+        tokens = self.tok_y.lookup(output)[0]
+
+        # `tf.function` prevents us from using the attention_weights that were
+        # calculated on the last iteration of the loop. So recalculate them outside
+        # the loop.
+        _, attention_weights = self.transformer(
+            [encoder_input, output[:, :-1]], training=False
+        )
+
+        return text, tokens, attention_weights
+
+
 def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_x, train_y = unpack_2d(train_xy)
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     def prepare_xy():
-        def normalize(sequence, maxlen):
-            sliced = tf.slice(sequence, [0], [min(maxlen - 2, sequence.shape[0])])
-            enclosed = tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
-            padded = tf.keras.preprocessing.sequence.pad_sequences(
-                [enclosed],
-                maxlen=maxlen,
-                padding="post",
-                truncating="post",
-                value=pip_tok.PAD_TOK,
-            )[0]
-            return tf.constant(padded)
-
         train_x_tok = (tok_x.tokenize(x) for x in train_x)
         train_y_tok = (tok_y.tokenize(y) for y in train_y)
 
@@ -104,30 +185,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_loss = tf.keras.metrics.Mean(name="train_loss")
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
 
-    transformer = transformer_m.Transformer(
-        num_layers=NUM_LAYERS,
-        d_model=D_MODEL,
-        num_heads=NUM_HEADS,
-        dff=DFF,
-        input_vocab_size=tok_x.vocab_size(),
-        target_vocab_size=tok_y.vocab_size(),
-        pe_input=X_MAX_LEN,
-        pe_target=Y_MAX_LEN,
-        rate=DROPOUT_RATE,
-    )
-
-    optimizer = transformer_m.optimizer(D_MODEL)
-
-    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-
-    ckpt_manager = tf.train.CheckpointManager(
-        ckpt, MODEL_XFMR_XFMR_BASE_PATH, max_to_keep=5
-    )
-
-    # if a checkpoint exists, restore the latest checkpoint.
-    if ckpt_manager.latest_checkpoint:
-        ckpt.restore(ckpt_manager.latest_checkpoint)
-        print("Latest checkpoint restored!!")
+    transformer, optimizer = restore_or_init(tok_x.vocab_size(), tok_y.vocab_size())
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
     # execution. The function specializes to the precise shape of the argument
