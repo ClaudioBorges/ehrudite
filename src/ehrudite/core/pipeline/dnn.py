@@ -113,11 +113,9 @@ class Translator(tf.Module):
 
         output = tf.transpose(output_array.stack())
         # output.shape(1, tokens)
-        print("AQUI")
-        print(output)
-        text = self.tok_y.detokenize(output)[0]  # shape: ()
+        text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
 
-        tokens = self.tok_y.lookup(output)[0]
+        tokens = output#self.tok_y.lookup(tf.cast(output, dtype=tf.int32))[0]
 
         # `tf.function` prevents us from using the attention_weights that were
         # calculated on the last iteration of the loop. So recalculate them outside
