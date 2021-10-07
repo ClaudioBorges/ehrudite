@@ -103,11 +103,12 @@ def cli():
 def run_tests(run_id, tokenizer_type, train_xy, test_xy):
     translator = pip_dnn.Translator(run_id, tokenizer_type)
     for (i, (x, y)) in enumerate(train_xy):
+        print("-" * 80)
         print("START")
         print(f"Iteration (i={i})")
         # print(f"Input X={x}")
         print(f"Input Y={y}")
-        translated_text, translated_tokens, attention_weights = translator(x)
+        translated_text, translated_tokens, attention_weights = translator(x, y)
         print(f"text={translated_text}, tokens={translated_tokens}")
         print("END")
     return

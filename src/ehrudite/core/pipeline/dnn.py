@@ -83,10 +83,14 @@ class Translator(tf.Module):
             self.tok_x.vocab_size(), self.tok_y.vocab_size()
         )
 
-    def __call__(self, sentence):
+    def __call__(self, sentence, real):
         # Input sentence is the EHR, hence preparing with BOS and EOS
         sequence = self.tok_x.tokenize(sentence)
         encoder_input = normalize(sequence, X_MAX_LEN)[tf.newaxis]
+
+        real = self.tok_y.tokenize(real)
+        real_nom = normalize(real, Y_MAX_LEN)
+        print(real_nom)
 
         bos_token = tf.constant(pip_tok.BOS_TOK, dtype=tf.int64)[tf.newaxis]
         eos_token = tf.constant(pip_tok.EOS_TOK, dtype=tf.int64)[tf.newaxis]
@@ -129,6 +133,7 @@ class Translator(tf.Module):
 
 def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_x, train_y = unpack_2d(train_xy)
+
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     def prepare_xy():
@@ -219,7 +224,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
         train_loss.reset_states()
         train_accuracy.reset_states()
 
-        # inp -> portuguese, tar -> english
+        # inp -> ehr, tar -> icd classification
         for (batch, (inp, tar)) in enumerate(train_batches):
             train_step(inp, tar)
 
@@ -228,7 +233,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
 
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 1 == 0:
             ckpt_save_path = ckpt_manager.save()
             print(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
 
