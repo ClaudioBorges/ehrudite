@@ -23,14 +23,7 @@ class RepeatableGenerator:
         return self._func_generator(**self._kwargs)
 
     def __iter__(self):
-        self._generator = self._make_generator()
-        return self
-
-    def __next__(self):
-        result = next(self._generator)
-        if result is None:
-            raise StopIteration
-        return result
+        return self._make_generator()
 
     def __call__(self):
         return self._make_generator()
@@ -39,10 +32,10 @@ class RepeatableGenerator:
 class LenghtableRepeatableGenerator(RepeatableGenerator):
     def __init__(self, _func_generator, _length=None, **kwargs):
         super(LenghtableRepeatableGenerator, self).__init__(_func_generator, **kwargs)
-        self._len = _length if _length else sum([1 for _ in self._make_generator()])
+        self._length = _length if _length else sum([1 for _ in self._make_generator()])
 
     def __len__(self):
-        return self._len
+        return self._length
 
 
 class ProgressableGenerator(RepeatableGenerator):

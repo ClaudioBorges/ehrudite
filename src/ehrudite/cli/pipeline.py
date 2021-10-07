@@ -105,7 +105,7 @@ def run_tests(run_id, tokenizer_type, train_xy, test_xy):
     for (i, (x, y)) in enumerate(train_xy):
         print("START")
         print(f"Iteration (i={i})")
-        #print(f"Input X={x}")
+        # print(f"Input X={x}")
         print(f"Input Y={y}")
         translated_text, translated_tokens, attention_weights = translator(x)
         print(f"text={translated_text}, tokens={translated_tokens}")
