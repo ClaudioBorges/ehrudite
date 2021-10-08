@@ -23,14 +23,14 @@ MODEL_LSTM_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_xfmr/
 
 X_MAX_LEN = 1024
 Y_MAX_LEN = 128
-BUFFER_SIZE = 128  # 20000
-BATCH_SIZE = 8  # 64
+BUFFER_SIZE = 1 #128  # 20000
+BATCH_SIZE = 1 # 8  # 64
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 4
-D_MODEL = 128
-DFF = 1024
-NUM_HEADS = 8
+NUM_LAYERS = 1 # 4
+D_MODEL = 32 # 128
+DFF = 64 # 1024
+NUM_HEADS = 1 # 8
 DROPOUT_RATE = 0.1
 
 
@@ -77,9 +77,9 @@ def restore_or_init(vocab_size_x, vocab_size_y):
 
 
 class Translator(tf.Module):
-    def __init__(self, run_id, tokenizer_type):
+    def __init__(self, run_id, tokenizer_type, transformer=None):
         self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
-        self.transformer, _ = restore_or_init(
+        self.transformer, _ = (transformer, None) or restore_or_init(
             self.tok_x.vocab_size(), self.tok_y.vocab_size()
         )
 
@@ -90,7 +90,6 @@ class Translator(tf.Module):
 
         real = self.tok_y.tokenize(real)
         real_nom = normalize(real, Y_MAX_LEN)
-        print(real_nom)
 
         bos_token = tf.constant(pip_tok.BOS_TOK, dtype=tf.int64)[tf.newaxis]
         eos_token = tf.constant(pip_tok.EOS_TOK, dtype=tf.int64)[tf.newaxis]
@@ -119,6 +118,9 @@ class Translator(tf.Module):
         # output.shape(1, tokens)
         text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
 
+        print("Output", output)
+        print("Real", real_nom)
+
         tokens = output  # self.tok_y.lookup(tf.cast(output, dtype=tf.int32))[0]
 
         # `tf.function` prevents us from using the attention_weights that were
@@ -142,7 +144,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
 
         return (
             (normalize(x, X_MAX_LEN), normalize(y, Y_MAX_LEN))
-            for x, y in zip(train_x_tok, train_y_tok)
+            for i, (x, y) in enumerate(zip(train_x_tok, train_y_tok))
         )
 
     train_xy_tok_gen = er_text.LenghtableRepeatableGenerator(
@@ -167,10 +169,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
     )
+    import sys
 
     def loss_function(real, pred):
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = loss_object(real, pred)
+        #tf.print("-" * 20, output_stream=sys.stdout)
+        #tf.print("Aqui", output_stream=sys.stdout)
+        #tf.print("Real:", real.shape, real, output_stream=sys.stdout )
+        #tf.print("Pred", pred.shape, pred, output_stream=sys.stdout)
 
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
@@ -191,6 +198,13 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
 
     transformer, optimizer = restore_or_init(tok_x.vocab_size(), tok_y.vocab_size())
+
+    # DEBUG
+    translator = Translator(run_id, tokenizer_type, transformer=transformer)
+    for a, b in zip(train_x, train_y):
+        debug_x = a
+        debug_y = b
+        break
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
     # execution. The function specializes to the precise shape of the argument
@@ -229,11 +243,12 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
             train_step(inp, tar)
 
             if batch % 50 == 0:
+                translator(debug_x, debug_y)
                 print(
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
 
-        if (epoch + 1) % 1 == 0:
+        if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
             print(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
 

@@ -194,7 +194,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         super(EncoderLayer, self).__init__()
         self.mha = tf.keras.layers.MultiHeadAttention(
-            num_heads=num_heads, key_dim=d_model
+            num_heads=num_heads, key_dim=d_model, value_dim=d_model
         )
         self.ffn = _point_wise_feed_forward_network(d_model, dff)
 
@@ -229,8 +229,12 @@ class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1):
         super(DecoderLayer, self).__init__()
 
-        self.mha1 = tf.keras.layers.MultiHeadAttention(d_model, num_heads)
-        self.mha2 = tf.keras.layers.MultiHeadAttention(d_model, num_heads)
+        self.mha1 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=d_model, value_dim=d_model
+        )
+        self.mha2 = tf.keras.layers.MultiHeadAttention(
+            num_heads=num_heads, key_dim=d_model, value_dim=d_model
+        )
 
         self.ffn = _point_wise_feed_forward_network(d_model, dff)
 
