@@ -4,6 +4,7 @@
 from ehrudite.core.pipeline import BASE_PATH
 from ehrudite.core.pipeline import make_progressable
 from ehrudite.core.pipeline import unpack_2d
+from enum import Enum
 import ehrudite.core.dnn.transformer as transformer_m
 import ehrudite.core.pipeline as pip
 import ehrudite.core.pipeline.tokenizer as pip_tok
@@ -23,16 +24,25 @@ MODEL_LSTM_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_xfmr/
 
 X_MAX_LEN = 1024
 Y_MAX_LEN = 128
-BUFFER_SIZE = 1 #128  # 20000
-BATCH_SIZE = 1 # 8  # 64
+BUFFER_SIZE = 128
+BATCH_SIZE = 8
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 1 # 4
-D_MODEL = 32 # 128
-DFF = 64 # 1024
-NUM_HEADS = 1 # 8
+NUM_LAYERS = 4
+D_MODEL = 128
+DFF = 1024
+NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
+class DnnType(Enum):
+    XFMR_XFMR = 1
+    XFMR_LSTM = 2
+    LSTM_XFMR = 3
+    LSTM_LSTM = 4
+
+SPECIFICATIONS = {
+    "base_ckpt": MODEL_CHECKPOINT_BASE_PATH,
+}
 
 def normalize(sequence, max_length):
     sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
@@ -47,28 +57,38 @@ def normalize(sequence, max_length):
     return tf.constant(padded)
 
 
-def restore_or_init(vocab_size_x, vocab_size_y):
+def restore_or_init(run_id, dnn_type, tokenizer_type):
+    tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
+
     transformer = transformer_m.Transformer(
         num_layers=NUM_LAYERS,
         d_model=D_MODEL,
         num_heads=NUM_HEADS,
         dff=DFF,
-        input_vocab_size=vocab_size_x,
-        target_vocab_size=vocab_size_y,
+        input_vocab_size=tok_x.vocab_size(),
+        target_vocab_size=tok_y.vocab_size(),
         pe_input=X_MAX_LEN,
         pe_target=Y_MAX_LEN,
         rate=DROPOUT_RATE,
     )
 
+    base_path = SPECIFICATIONS["base_ckpt"]
+    full_path = os.path.join(base_path, str(dnn_type), str(tokenizer_type), str(run_id))
+    print(f"Pipeline path (path={full_path})")
+
     optimizer = transformer_m.optimizer(D_MODEL)
     ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+
     ckpt_manager = tf.train.CheckpointManager(
-        ckpt, MODEL_XFMR_XFMR_BASE_PATH, max_to_keep=5
+        ckpt, full_path, max_to_keep=5
     )
-    # if a checkpoint exists, restore the latest checkpoint.
     if ckpt_manager.latest_checkpoint:
+        # if a checkpoint exists, restore the latest checkpoint.
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print("Latest checkpoint restored!!")
+    else:
+        print("No checkpoing found!")
+
 
     return (
         transformer,
@@ -77,10 +97,10 @@ def restore_or_init(vocab_size_x, vocab_size_y):
 
 
 class Translator(tf.Module):
-    def __init__(self, run_id, tokenizer_type, transformer=None):
+    def __init__(self, run_id, dnn_type, tokenizer_type, transformer=None):
         self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
         self.transformer, _ = (transformer, None) or restore_or_init(
-            self.tok_x.vocab_size(), self.tok_y.vocab_size()
+            run_id, dnn_type, tokenizer_type
         )
 
     def __call__(self, sentence, real):
@@ -117,9 +137,6 @@ class Translator(tf.Module):
         output = tf.transpose(output_array.stack())
         # output.shape(1, tokens)
         text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
-
-        print("Output", output)
-        print("Real", real_nom)
 
         tokens = output  # self.tok_y.lookup(tf.cast(output, dtype=tf.int32))[0]
 
@@ -197,13 +214,12 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_loss = tf.keras.metrics.Mean(name="train_loss")
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
 
-    transformer, optimizer = restore_or_init(tok_x.vocab_size(), tok_y.vocab_size())
+    transformer, optimizer = restore_or_init(run_id, DnnType.XFMR_XFMR, tokenizer_type)
 
     # DEBUG
-    translator = Translator(run_id, tokenizer_type, transformer=transformer)
-    for a, b in zip(train_x, train_y):
-        debug_x = a
-        debug_y = b
+    translator = Translator(run_id, DnnType.XFMR_XFMR, tokenizer_type, transformer=transformer)
+    for vals in zip(train_x, train_y):
+        first_x, first_y = vals
         break
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
@@ -243,10 +259,11 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
             train_step(inp, tar)
 
             if batch % 50 == 0:
-                translator(debug_x, debug_y)
+                translator(first_x, first_y)
                 print(
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
+                print(f"Elapsed time: {time.time() - start:.2f} secs")
 
         if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
