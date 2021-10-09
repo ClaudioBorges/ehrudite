@@ -15,24 +15,19 @@ import tensorflow as tf
 import time
 
 
-MODEL_CHECKPOINT_BASE_PATH = os.path.join(BASE_PATH, "model/checkpoint/train/")
-MODEL_XFMR_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "xfmr_xfmr/")
-MODEL_XFMR_LSTM_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "xfmr_lstm/")
-MODEL_LSTM_LSTM_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_lstm/")
-MODEL_LSTM_XFMR_BASE_PATH = os.path.join(MODEL_CHECKPOINT_BASE_PATH, "lstm_xfmr/")
-
-
-X_MAX_LEN = 1024
+X_MAX_LEN = 2048
 Y_MAX_LEN = 128
-BUFFER_SIZE = 128
+BUFFER_SIZE = 130
 BATCH_SIZE = 8
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 4
-D_MODEL = 128
-DFF = 1024
+NUM_LAYERS = 6
+D_MODEL = 512
+DFF = 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
+
+MODEL_CHECKPOINT_BASE_PATH = os.path.join(BASE_PATH, "model/checkpoint/train/")
 
 class DnnType(Enum):
     XFMR_XFMR = 1
