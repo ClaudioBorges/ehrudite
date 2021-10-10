@@ -18,9 +18,9 @@ BUFFER_SIZE = 128
 BATCH_SIZE = 8
 EPOCHS = 40
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 6 # 4 # 6
-D_MODEL = 512 # 128 # 512
-DFF = 2048 # 512 # 2048
+NUM_LAYERS = 6  # 4 # 6
+D_MODEL = 512  # 128 # 512
+DFF = 2048  # 512 # 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
@@ -161,15 +161,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
-    #debug_x = []
-    #debug_y = []
-    #for i, (x, y) in enumerate(zip(train_x, train_y)):
+    # debug_x = []
+    # debug_y = []
+    # for i, (x, y) in enumerate(zip(train_x, train_y)):
     #    debug_x.append(x)
     #    debug_y.append(y)
     #    if i >= (256 - 1):
     #        break
-    #train_x = debug_x
-    #train_y = debug_y
+    # train_x = debug_x
+    # train_y = debug_y
 
     def prepare_xy():
         train_x_tok = (tok_x.tokenize(x) for x in train_x)
