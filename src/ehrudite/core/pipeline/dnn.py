@@ -12,15 +12,15 @@ import tensorflow as tf
 import time
 
 
-X_MAX_LEN = 2048
+X_MAX_LEN = 3000
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128
 BATCH_SIZE = 8
-EPOCHS = 20
+EPOCHS = 40
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 6
-D_MODEL = 512
-DFF = 2048
+NUM_LAYERS = 6 # 4 # 6
+D_MODEL = 512 # 128 # 512
+DFF = 2048 # 512 # 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
@@ -92,13 +92,14 @@ def restore_or_init(run_id, dnn_type, tokenizer_type):
     return (
         transformer,
         optimizer,
+        ckpt_manager,
     )
 
 
 class Translator(tf.Module):
     def __init__(self, run_id, dnn_type, tokenizer_type, transformer=None):
         self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
-        self.transformer, _ = (transformer, None) or restore_or_init(
+        self.transformer, _, _ = (transformer, None, None) or restore_or_init(
             run_id, dnn_type, tokenizer_type
         )
 
@@ -118,7 +119,7 @@ class Translator(tf.Module):
         output_array = tf.TensorArray(dtype=tf.int64, size=0, dynamic_size=True)
         output_array = output_array.write(0, bos_token)
 
-        for i in tf.range(Y_MAX_LEN):
+        for i in tf.range(Y_MAX_LEN - 1):
             output = tf.transpose(output_array.stack())
             predictions, _ = self.transformer([encoder_input, output], training=False)
 
@@ -156,7 +157,19 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     )
     train_x, train_y = pip.unpack_2d(train_xy)
 
+    logging.info("Restoring tokenizer...")
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
+
+    # DEBUG - Fixed elements
+    #debug_x = []
+    #debug_y = []
+    #for i, (x, y) in enumerate(zip(train_x, train_y)):
+    #    debug_x.append(x)
+    #    debug_y.append(y)
+    #    if i >= (256 - 1):
+    #        break
+    #train_x = debug_x
+    #train_y = debug_y
 
     def prepare_xy():
         train_x_tok = (tok_x.tokenize(x) for x in train_x)
@@ -164,13 +177,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
 
         return (
             (normalize(x, X_MAX_LEN), normalize(y, Y_MAX_LEN))
-            for i, (x, y) in enumerate(zip(train_x_tok, train_y_tok))
+            for x, y in zip(train_x_tok, train_y_tok)
         )
 
+    logging.info("Preparing x and y...")
     train_xy_tok_gen = er_text.LenghtableRepeatableGenerator(
         prepare_xy, _length=len(train_xy)
     )
 
+    logging.info("Creating dataset...")
     train_xy_tok_ds = tf.data.Dataset.from_generator(
         train_xy_tok_gen,
         output_signature=(
@@ -189,7 +204,6 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
     )
-    import sys
 
     def loss_function(real, pred):
         mask = tf.math.logical_not(tf.math.equal(real, 0))
@@ -217,7 +231,10 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     train_loss = tf.keras.metrics.Mean(name="train_loss")
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
 
-    transformer, optimizer = restore_or_init(run_id, DnnType.XFMR_XFMR, tokenizer_type)
+    logging.info("Restoring dnn...")
+    transformer, optimizer, ckpt_manager = restore_or_init(
+        run_id, DnnType.XFMR_XFMR, tokenizer_type
+    )
 
     # DEBUG
     translator = Translator(
@@ -253,7 +270,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
         train_loss(loss)
         train_accuracy(accuracy_function(tar_real, predictions))
 
-    logging.info(f"Training on epochs (epochs={EPOCHS}")
+    logging.info(f"Training on epochs (epochs={EPOCHS})")
     for epoch in range(EPOCHS):
         start = time.time()
 
@@ -265,7 +282,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
             train_step(inp, tar)
 
             if batch % 50 == 0:
-                # translator(first_x, first_y)
+                text, tokens, _ = translator(first_x, first_y)
+                print("-" * 80)
+                print("Real")
+                print(first_y)
+                print(tok_y.tokenize(first_y))
+                print("Predicted")
+                print(text)
+                print(tokens)
+
                 logging.info(
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
