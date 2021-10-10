@@ -1,23 +1,20 @@
 """ehrudite tokenizer pipeline"""
 
-
-from ehrudite.core.pipeline import BASE_PATH
-from ehrudite.core.pipeline import make_progressable
-from ehrudite.core.pipeline import unpack_2d
-from enum import Enum
 import ehrudite.core.dnn.transformer as transformer_m
 import ehrudite.core.pipeline as pip
 import ehrudite.core.pipeline.tokenizer as pip_tok
 import ehrudite.core.text as er_text
+import enum
 import logging
 import os
+import pathlib as pathlib
 import tensorflow as tf
 import time
 
 
 X_MAX_LEN = 2048
 Y_MAX_LEN = 128
-BUFFER_SIZE = 130
+BUFFER_SIZE = 128
 BATCH_SIZE = 8
 EPOCHS = 20
 # From https://www.tensorflow.org/text/tutorials/transformer
@@ -27,17 +24,20 @@ DFF = 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
-MODEL_CHECKPOINT_BASE_PATH = os.path.join(BASE_PATH, "model/checkpoint/train/")
+MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
 
-class DnnType(Enum):
+
+class DnnType(enum.Enum):
     XFMR_XFMR = 1
     XFMR_LSTM = 2
     LSTM_XFMR = 3
     LSTM_LSTM = 4
 
+
 SPECIFICATIONS = {
     "base_ckpt": MODEL_CHECKPOINT_BASE_PATH,
 }
+
 
 def normalize(sequence, max_length):
     sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
@@ -53,6 +53,9 @@ def normalize(sequence, max_length):
 
 
 def restore_or_init(run_id, dnn_type, tokenizer_type):
+    logging.info(
+        f"Restore or init (run_id={run_id}, dnn={dnn_type}, tok={tokenizer_type})"
+    )
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     transformer = transformer_m.Transformer(
@@ -68,22 +71,23 @@ def restore_or_init(run_id, dnn_type, tokenizer_type):
     )
 
     base_path = SPECIFICATIONS["base_ckpt"]
-    full_path = os.path.join(base_path, str(dnn_type), str(tokenizer_type), str(run_id))
-    print(f"Pipeline path (path={full_path})")
+    full_path = os.path.join(
+        base_path, str(dnn_type), str(tokenizer_type), f"run_id={str(run_id)}"
+    )
+    # Create the path if it doesn't exist
+    pathlib.Path(full_path).mkdir(parents=True, exist_ok=True)
+    logging.info(f"Pipeline path (path={full_path})")
 
     optimizer = transformer_m.optimizer(D_MODEL)
     ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
 
-    ckpt_manager = tf.train.CheckpointManager(
-        ckpt, full_path, max_to_keep=5
-    )
+    ckpt_manager = tf.train.CheckpointManager(ckpt, full_path, max_to_keep=5)
     if ckpt_manager.latest_checkpoint:
         # if a checkpoint exists, restore the latest checkpoint.
         ckpt.restore(ckpt_manager.latest_checkpoint)
-        print("Latest checkpoint restored!!")
+        logging.info(f"Latest checkpoint restored (path={full_path})")
     else:
-        print("No checkpoing found!")
-
+        logging.info(f"No checkpoing found (path={full_path})")
 
     return (
         transformer,
@@ -146,7 +150,11 @@ class Translator(tf.Module):
 
 
 def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
-    train_x, train_y = unpack_2d(train_xy)
+    logging.info(
+        f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
+        f"tok={tokenizer_type})"
+    )
+    train_x, train_y = pip.unpack_2d(train_xy)
 
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
@@ -186,10 +194,10 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     def loss_function(real, pred):
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = loss_object(real, pred)
-        #tf.print("-" * 20, output_stream=sys.stdout)
-        #tf.print("Aqui", output_stream=sys.stdout)
-        #tf.print("Real:", real.shape, real, output_stream=sys.stdout )
-        #tf.print("Pred", pred.shape, pred, output_stream=sys.stdout)
+        # tf.print("-" * 20, output_stream=sys.stdout)
+        # tf.print("Aqui", output_stream=sys.stdout)
+        # tf.print("Real:", real.shape, real, output_stream=sys.stdout )
+        # tf.print("Pred", pred.shape, pred, output_stream=sys.stdout)
 
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
@@ -212,7 +220,9 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     transformer, optimizer = restore_or_init(run_id, DnnType.XFMR_XFMR, tokenizer_type)
 
     # DEBUG
-    translator = Translator(run_id, DnnType.XFMR_XFMR, tokenizer_type, transformer=transformer)
+    translator = Translator(
+        run_id, DnnType.XFMR_XFMR, tokenizer_type, transformer=transformer
+    )
     for vals in zip(train_x, train_y):
         first_x, first_y = vals
         break
@@ -243,6 +253,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
         train_loss(loss)
         train_accuracy(accuracy_function(tar_real, predictions))
 
+    logging.info(f"Training on epochs (epochs={EPOCHS}")
     for epoch in range(EPOCHS):
         start = time.time()
 
@@ -254,18 +265,18 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
             train_step(inp, tar)
 
             if batch % 50 == 0:
-                translator(first_x, first_y)
-                print(
+                # translator(first_x, first_y)
+                logging.info(
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
-                print(f"Elapsed time: {time.time() - start:.2f} secs")
+                logging.info(f"Elapsed time: {time.time() - start:.2f} secs")
 
         if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
-            print(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
+            logging.info(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
 
-        print(
+        logging.info(
             f"Epoch {epoch + 1} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
         )
 
-        print(f"Time taken for 1 epoch: {time.time() - start:.2f} secs\n")
+        logging.info(f"Time taken for 1 epoch: {time.time() - start:.2f} secs\n")

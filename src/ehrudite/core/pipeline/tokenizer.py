@@ -1,18 +1,15 @@
 """ehrudite tokenizer pipeline"""
 
-
-from ehrudite.core.pipeline import BASE_PATH
-from ehrudite.core.pipeline import make_progressable
-from ehrudite.core.pipeline import unpack_2d
-from enum import Enum
+import ehrudite.core.pipeline as pip
 import ehrudite.core.text as er_text
 import ehrudite.core.tokenizer.sentencepiece as sentencepiece
 import ehrudite.core.tokenizer.wordpiece as wordpiece
+import enum
 import logging
 import os
 
 
-TOKENIZER_BASE_PATH = os.path.join(BASE_PATH, "tokenizer/")
+TOKENIZER_BASE_PATH = os.path.join(pip.BASE_PATH, "tokenizer/")
 
 VOCAB_SIZE_X = 2 ** 14
 VOCAB_SIZE_Y = 2 ** 9
@@ -23,7 +20,7 @@ EOS_TOK = 2
 UNK_TOK = 3
 
 
-class TokenizerType(Enum):
+class TokenizerType(enum.Enum):
     SENTENCEPIECE = 1
     WORDPIECE = 2
 
@@ -79,9 +76,9 @@ def train(
     logging.info(
         f"Training tokenizers (run_id={run_id}, tokenizer_type={tokenizer_type})"
     )
-    train_x, train_y = unpack_2d(train_xy)
-    train_x = make_progressable(train_x)
-    train_y = make_progressable(train_y)
+    train_x, train_y = pip.unpack_2d(train_xy)
+    train_x = pip.make_progressable(train_x)
+    train_y = pip.make_progressable(train_y)
 
     spec = _get_specification(tokenizer_type)
     ckpt_x, ckpt_y = _get_train_checkpoints(run_id, spec, **kwargs)

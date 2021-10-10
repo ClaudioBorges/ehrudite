@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from argparse import RawTextHelpFormatter
-from ehrudite.core.pipeline import ehrpreper_k_fold_gen
 import ehrudite.cli.base as cli_base
+import ehrudite.core.pipeline as pip
 import ehrudite.core.pipeline.dnn as pip_dnn
 import ehrudite.core.pipeline.tokenizer as pip_tok
 import logging
@@ -70,22 +70,24 @@ def cli():
     )
 
     ehrpreper_file = os.path.join(args.ehr_data_path, EHRPREPER_FILENAME)
-    k_folded = ehrpreper_k_fold_gen(ehrpreper_file, n_splits=args.n_splits)
+    k_folded = pip.ehrpreper_k_fold_gen(ehrpreper_file, n_splits=args.n_splits)
 
     for run_id, (
         train_xy,
         test_xy,
     ) in enumerate(k_folded):
         logging.info(f"Running k_fold (run_id={run_id})")
-        # Pipeline Tokenizer
+        # Run for each tokenizer
         for tokenizer_type in pip_tok.TokenizerType:
+            # Tokenizer
             if args.pipeline_tokenizer:
                 pip_tok.train(
                     run_id,
                     tokenizer_type,
                     train_xy,
                 )
-            if args.pipeline_xfmr_xfmr:
+            # DNN Training
+            elif args.pipeline_xfmr_xfmr:
                 if args.test:
                     run_tests(run_id, tokenizer_type, train_xy, test_xy)
                     return
