@@ -69,6 +69,15 @@ def preprocess_text(text, to_lower=True, remove_split_lines=True):
     return text_step_2
 
 
+def preprocess_icds9(icds9, icd_10_limit=3, separator=" ", **kwargs):
+    converter = ehrpreper.Icd9To10Converter()
+    # Convert to ICD10, use the first 3 digits, remove duplications and sort
+    codes = (preprocess_text(converter.convert(icd9)[:icd_10_limit]) for icd9 in icds9)
+    deduped = list(set(codes))
+    ordered = sorted(deduped)
+    return separator.join(filter(lambda x: len(x) > 0, ordered))
+
+
 def preprocess(texts, **kwargs):
     return (preprocess_text(text, **kwargs) for text in texts)
 
