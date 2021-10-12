@@ -75,7 +75,7 @@ def preprocess_icds9(icds9, icd_10_limit=3, separator=" ", **kwargs):
     codes = (preprocess_text(converter.convert(icd9)[:icd_10_limit]) for icd9 in icds9)
     deduped = list(set(codes))
     ordered = sorted(deduped)
-    return separator.join(filter(lambda x: len(x) > 0, ordered))
+    return separator.join(ordered)
 
 
 def preprocess(texts, **kwargs):

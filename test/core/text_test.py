@@ -64,4 +64,4 @@ def test_preprocess():
 def test_preprocess_icds9():
     icds9 = ["3371", "V5867", "unk"]
     preprocessed = er_text.preprocess_icds9(icds9)
-    assert "g99 z79" == preprocessed
+    assert "g99 unk z79" == preprocessed
