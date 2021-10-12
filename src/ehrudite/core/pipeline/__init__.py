@@ -26,16 +26,11 @@ def unpack_2d(packed):
 def ehrpreper_k_fold_gen(ehrpreper_file, n_splits=4):
     # Data builder from ehrpreper documents to tuple of X and Y
     def data_builder():
-        def annotations_joiner(annotations, separator=" "):
-            prepared = [er_text.preprocess_text(val) for val in annotations]
-            ordered = sorted(annotations)
-            return separator.join(ordered)
-
         documents = ehrpreper.document_entity_generator(ehrpreper_file)
         return (
             (
                 er_text.preprocess_text(document.content),
-                er_text.preprocess_text(annotations_joiner(document.annotations)),
+                er_text.preprocess_icds9(document.annotations),
             )
             for document in documents
         )
