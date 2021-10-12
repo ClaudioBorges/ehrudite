@@ -12,7 +12,7 @@ import os
 TOKENIZER_BASE_PATH = os.path.join(pip.BASE_PATH, "tokenizer/")
 
 VOCAB_SIZE_X = 2 ** 14
-VOCAB_SIZE_Y = 2 ** 9
+VOCAB_SIZE_Y = 2 ** 7
 
 PAD_TOK = 0
 BOS_TOK = 1
