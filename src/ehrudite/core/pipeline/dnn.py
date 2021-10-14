@@ -12,16 +12,16 @@ import tensorflow as tf
 import time
 
 
-X_MAX_LEN = 3000
+X_MAX_LEN = 2048
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128
-BATCH_SIZE = 8
+BATCH_SIZE = 1
 EPOCHS = 40
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 6  # 4 # 6
-D_MODEL = 512  # 128 # 512
-DFF = 2048  # 512 # 2048
-NUM_HEADS = 8
+NUM_LAYERS = 2  # 4 # 6
+D_MODEL = 128  # 128 # 512
+DFF = 512  # 512 # 2048
+NUM_HEADS = 4
 DROPOUT_RATE = 0.1
 
 MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
@@ -52,7 +52,7 @@ def normalize(sequence, max_length):
     return tf.constant(padded)
 
 
-def restore_or_init(run_id, dnn_type, tokenizer_type):
+def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
     logging.info(
         f"Restore or init (run_id={run_id}, dnn={dnn_type}, tok={tokenizer_type})"
     )
@@ -82,12 +82,13 @@ def restore_or_init(run_id, dnn_type, tokenizer_type):
     ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
 
     ckpt_manager = tf.train.CheckpointManager(ckpt, full_path, max_to_keep=5)
-    if ckpt_manager.latest_checkpoint:
-        # if a checkpoint exists, restore the latest checkpoint.
-        ckpt.restore(ckpt_manager.latest_checkpoint)
-        logging.info(f"Latest checkpoint restored (path={full_path})")
-    else:
-        logging.info(f"No checkpoing found (path={full_path})")
+    if restore:
+        if ckpt_manager.latest_checkpoint:
+            # if a checkpoint exists, restore the latest checkpoint.
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+            logging.info(f"Latest checkpoint restored (path={full_path})")
+        else:
+            logging.info(f"No checkpoing found (path={full_path})")
 
     return (
         transformer,
@@ -150,7 +151,9 @@ class Translator(tf.Module):
         return text, tokens, attention_weights
 
 
-def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
+def train_xfmr_xfmr(
+    run_id, tokenizer_type, train_xy, test_xy, restore=False, save=False
+):
     logging.info(
         f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
         f"tok={tokenizer_type})"
@@ -161,19 +164,19 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
-    # debug_x = []
-    # debug_y = []
-    # for i, (x, y) in enumerate(zip(train_x, train_y)):
-    #    debug_x.append(x)
-    #    debug_y.append(y)
-    #    if i >= (256 - 1):
-    #        break
-    # train_x = debug_x
-    # train_y = debug_y
+    debug_x = []
+    debug_y = []
+    for i, (x, y) in enumerate(zip(train_x, train_y)):
+        debug_x.append(x)
+        debug_y.append(y)
+        if i >= (2 - 1):
+            break
+    train_x = debug_x
+    train_y = debug_y
 
     def prepare_xy():
-        train_x_tok = (tok_x.tokenize(x) for x in train_x)
-        train_y_tok = (tok_y.tokenize(y) for y in train_y)
+        train_x_tok = list(tok_x.tokenize(x) for x in train_x)
+        train_y_tok = list(tok_y.tokenize(y) for y in train_y)
 
         return (
             (normalize(x, X_MAX_LEN), normalize(y, Y_MAX_LEN))
@@ -208,10 +211,6 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
     def loss_function(real, pred):
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = loss_object(real, pred)
-        # tf.print("-" * 20, output_stream=sys.stdout)
-        # tf.print("Aqui", output_stream=sys.stdout)
-        # tf.print("Real:", real.shape, real, output_stream=sys.stdout )
-        # tf.print("Pred", pred.shape, pred, output_stream=sys.stdout)
 
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
@@ -233,7 +232,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
 
     logging.info("Restoring dnn...")
     transformer, optimizer, ckpt_manager = restore_or_init(
-        run_id, DnnType.XFMR_XFMR, tokenizer_type
+        run_id, DnnType.XFMR_XFMR, tokenizer_type, restore=restore
     )
 
     # DEBUG
@@ -271,9 +270,17 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
         train_accuracy(accuracy_function(tar_real, predictions))
 
     logging.info(f"Training on epochs (epochs={EPOCHS})")
-    for epoch in range(EPOCHS):
-        start = time.time()
+    # for epoch in range(EPOCHS):
+    epoch = 0
+    while 1:
+        epoch += 1
+        if train_accuracy.result() >= 0.8:
+            logging.info(
+                f"Accuracy reached: Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+            )
+            break
 
+        start = time.time()
         train_loss.reset_states()
         train_accuracy.reset_states()
 
@@ -282,21 +289,21 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy):
             train_step(inp, tar)
 
             if batch % 50 == 0:
-                text, tokens, _ = translator(first_x, first_y)
-                print("-" * 80)
-                print("Real")
-                print(first_y)
-                print(tok_y.tokenize(first_y))
-                print("Predicted")
-                print(text)
-                print(tokens)
+                # text, tokens, _ = translator(first_x, first_y)
+                # print("-" * 80)
+                # print("Real")
+                # print(first_y)
+                # print(tok_y.tokenize(first_y))
+                # print("Predicted")
+                # print(text)
+                # print(tokens)
 
                 logging.info(
                     f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
                 logging.info(f"Elapsed time: {time.time() - start:.2f} secs")
 
-        if (epoch + 1) % 5 == 0:
+        if save:
             ckpt_save_path = ckpt_manager.save()
             logging.info(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
 

@@ -98,6 +98,7 @@ def cli():
                         train_xy,
                         test_xy,
                     )
+                return
 
     logging.info("Finished")
 
