@@ -1,5 +1,6 @@
 """ehrudite tokenizer pipeline"""
 
+import Levenshtein
 import ehrudite.core.dnn.transformer as transformer_m
 import ehrudite.core.pipeline as pip
 import ehrudite.core.pipeline.tokenizer as pip_tok
@@ -18,11 +19,11 @@ BUFFER_SIZE = 128
 BATCH_SIZE = 8
 # From https://www.tensorflow.org/text/tutorials/transformer
 NUM_LAYERS = 4  # 3 # 4  # 8  # 4 # 6
-D_MODEL = 512  # 128 # 512
-DFF = 2048  # 512 # 2048
+D_MODEL = 512
+DFF = 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
-ACCURACY_TH = 0.8
+ACCURACY_TH = 0.85
 # Used for testing a subset of the entire corpus. Use -1 to train with full corpus
 CORPUS_LIMIT = -1
 
@@ -179,28 +180,47 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
         mask = tf.cast(mask, dtype=tf.float32)
         return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
 
+    def edit_distance(real, pred):
+        # Make it irrelevant to the code order
+        hypothesis_words = sorted(pred.split(" "))
+        truth_words = sorted(real.split(" "))
+
+        hyphothesis = " ".join(hypothesis_words)
+        truth = " ".join(truth_words)
+
+        distance = Levenshtein.distance(hyphothesis, truth)
+        # Normalize the distance
+        return distance / max(len(hyphothesis), len(truth))
+
     val_tok_accuracy = tf.keras.metrics.Mean(name="val_tok_accuracy")
+    val_edit_distance = tf.keras.metrics.Mean(name="val_edit_distance")
     logging.info(f"Validating model...")
 
     start = time.time()
     for (i, (x, y)) in enumerate(train_xy):
         pred_text, pred_tokens, attention_weights = translator(x)
 
+        val_edit_distance(edit_distance(y, pred_text.numpy().decode()))
+
         pred_tokens = normalize(pred_tokens[0], Y_MAX_LEN, add_bos_eof=False)
         real_tokens = normalize(tok_y.tokenize(y), Y_MAX_LEN, add_bos_eof=True)
-
         val_tok_accuracy(accuracy(real_tokens, pred_tokens))
 
         if i > 0 and i % 1 == 0:
             time_diff = time.time() - start
             logging.info(
                 f"Partial result (itetarion={i}, "
-                f"tok_accuracy={val_tok_accuracy.result():.4f}, time_diff={time_diff:.2f}s)"
+                f"tok_accuracy={val_tok_accuracy.result():.4f}, "
+                f"edit_distance={val_edit_distance.result():.4f}, "
+                f"time_diff={time_diff:.2f}s)"
             )
 
     time_diff = time.time() - start
     logging.info(
-        f"Validation finished (tok_accuracy={val_tok_accuracy.result():.4f}, time_diff={time_diff:.2f}s"
+        f"Validation finished ("
+        f"tok_accuracy={val_tok_accuracy.result():.4f}, "
+        f"edit_distance={val_edit_distance.result():.4f}, "
+        f"time_diff={time_diff:.2f}s"
     )
     return
 
