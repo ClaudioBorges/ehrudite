@@ -13,6 +13,12 @@ EHR_DATA = "../ehr-data"
 N_SPLITS = 4
 
 
+TOKENIZER_ALLOW_LIST = [
+    pip_tok.TokenizerType.SENTENCEPIECE,
+    #pip_tok.TokenizerType.WORDPIECE,
+]
+
+
 def make_parser():
     parser = ArgumentParser(
         description="Ehrudite pipelines",
@@ -34,7 +40,7 @@ def make_parser():
         "-t",
         "--test",
         action="store_true",
-        help=r"run tests",
+        help=r"run tests and validation",
     )
     parser.add_argument(
         "-n",
@@ -78,7 +84,7 @@ def cli():
     ) in enumerate(k_folded):
         logging.info(f"Running k_fold (run_id={run_id})")
         # Run for each tokenizer
-        for tokenizer_type in pip_tok.TokenizerType:
+        for tokenizer_type in TOKENIZER_ALLOW_LIST:
             # Tokenizer
             if args.pipeline_tokenizer:
                 pip_tok.train(
@@ -86,32 +92,26 @@ def cli():
                     tokenizer_type,
                     train_xy,
                 )
-            # DNN Training
+            # DNN Training and validate
             elif args.pipeline_xfmr_xfmr:
+                dnn_type = pip_dnn.DnnType.XFMR_XFMR
                 if args.test:
-                    run_tests(run_id, tokenizer_type, train_xy, test_xy)
-                    return
-                else:
-                    pip_dnn.train_xfmr_xfmr(
+                    pip_dnn.validate(
                         run_id,
+                        dnn_type,
                         tokenizer_type,
                         train_xy,
                         test_xy,
                     )
-                return
+                else:
+                    pip_dnn.train(
+                        run_id,
+                        dnn_type,
+                        tokenizer_type,
+                        train_xy,
+                        test_xy,
+                        restore=False,
+                        save=False,
+                    )
 
     logging.info("Finished")
-
-
-def run_tests(run_id, tokenizer_type, train_xy, test_xy):
-    translator = pip_dnn.Translator(run_id, tokenizer_type)
-    for (i, (x, y)) in enumerate(train_xy):
-        print("-" * 80)
-        print("START")
-        print(f"Iteration (i={i})")
-        # print(f"Input X={x}")
-        print(f"Input Y={y}")
-        translated_text, translated_tokens, attention_weights = translator(x, y)
-        print(f"text={translated_text}, tokens={translated_tokens}")
-        print("END")
-    return

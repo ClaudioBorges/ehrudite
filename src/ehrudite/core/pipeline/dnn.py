@@ -15,14 +15,14 @@ import time
 X_MAX_LEN = 2048
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128
-BATCH_SIZE = 1
-EPOCHS = 40
+BATCH_SIZE = 8
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 2  # 4 # 6
-D_MODEL = 128  # 128 # 512
-DFF = 512  # 512 # 2048
-NUM_HEADS = 4
+NUM_LAYERS = 3 # 4  # 8  # 4 # 6
+D_MODEL = 512  # 128 # 512
+DFF = 2048  # 512 # 2048
+NUM_HEADS = 8
 DROPOUT_RATE = 0.1
+ACCURACY_TH = 0.8
 
 MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
 
@@ -100,9 +100,9 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
 class Translator(tf.Module):
     def __init__(self, run_id, dnn_type, tokenizer_type, transformer=None):
         self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
-        self.transformer, _, _ = (transformer, None, None) or restore_or_init(
-            run_id, dnn_type, tokenizer_type
-        )
+        self.transformer = transformer
+        if self.transformer is None:
+            self.transformer, _, _ = restore_or_init(run_id, dnn_type, tokenizer_type)
 
     def __call__(self, sentence, real):
         # Input sentence is the EHR, hence preparing with BOS and EOS
@@ -151,9 +151,26 @@ class Translator(tf.Module):
         return text, tokens, attention_weights
 
 
-def train_xfmr_xfmr(
-    run_id, tokenizer_type, train_xy, test_xy, restore=False, save=False
-):
+def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
+    translator = Translator(run_id, dnn_type, tokenizer_type)
+    for (i, (x, y)) in enumerate(train_xy):
+        print("-" * 80)
+        print("START")
+        print(f"Iteration (i={i})")
+        # print(f"Input X={x}")
+        print(f"Input Y={y}")
+        translated_text, translated_tokens, attention_weights = translator(x, y)
+        print(f"text={translated_text}, tokens={translated_tokens}")
+        print("END")
+    return
+
+
+def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
+    if dnn_type == DnnType.XFMR_XFMR:
+        train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
+
+
+def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True):
     logging.info(
         f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
         f"tok={tokenizer_type})"
@@ -167,16 +184,16 @@ def train_xfmr_xfmr(
     debug_x = []
     debug_y = []
     for i, (x, y) in enumerate(zip(train_x, train_y)):
-        debug_x.append(x)
-        debug_y.append(y)
-        if i >= (2 - 1):
-            break
+       debug_x.append(x)
+       debug_y.append(y)
+       if i >= (1024 - 1):
+           break
     train_x = debug_x
     train_y = debug_y
 
     def prepare_xy():
-        train_x_tok = list(tok_x.tokenize(x) for x in train_x)
-        train_y_tok = list(tok_y.tokenize(y) for y in train_y)
+        train_x_tok = (tok_x.tokenize(x) for x in train_x)
+        train_y_tok = (tok_y.tokenize(y) for y in train_y)
 
         return (
             (normalize(x, X_MAX_LEN), normalize(y, Y_MAX_LEN))
@@ -269,14 +286,13 @@ def train_xfmr_xfmr(
         train_loss(loss)
         train_accuracy(accuracy_function(tar_real, predictions))
 
-    logging.info(f"Training on epochs (epochs={EPOCHS})")
-    # for epoch in range(EPOCHS):
+    logging.info(f"Training (accuracy={ACCURACY_TH})")
     epoch = 0
     while 1:
         epoch += 1
-        if train_accuracy.result() >= 0.8:
+        if train_accuracy.result() >= ACCURACY_TH:
             logging.info(
-                f"Accuracy reached: Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                f"Accuracy reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
             )
             break
 
@@ -288,7 +304,7 @@ def train_xfmr_xfmr(
         for (batch, (inp, tar)) in enumerate(train_batches):
             train_step(inp, tar)
 
-            if batch % 50 == 0:
+            if batch > 0 and batch % 50 == 0:
                 # text, tokens, _ = translator(first_x, first_y)
                 # print("-" * 80)
                 # print("Real")
@@ -299,7 +315,7 @@ def train_xfmr_xfmr(
                 # print(tokens)
 
                 logging.info(
-                    f"Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                    f"Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
                 logging.info(f"Elapsed time: {time.time() - start:.2f} secs")
 
@@ -308,7 +324,7 @@ def train_xfmr_xfmr(
             logging.info(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
 
         logging.info(
-            f"Epoch {epoch + 1} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+            f"Epoch {epoch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
         )
 
         logging.info(f"Time taken for 1 epoch: {time.time() - start:.2f} secs\n")
