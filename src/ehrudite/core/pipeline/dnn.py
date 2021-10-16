@@ -17,12 +17,14 @@ Y_MAX_LEN = 128
 BUFFER_SIZE = 128
 BATCH_SIZE = 8
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 3 # 4  # 8  # 4 # 6
+NUM_LAYERS = 4  # 3 # 4  # 8  # 4 # 6
 D_MODEL = 512  # 128 # 512
 DFF = 2048  # 512 # 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 ACCURACY_TH = 0.8
+# Used for testing a subset of the entire corpus. Use -1 to train with full corpus
+CORPUS_LIMIT = -1
 
 MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
 
@@ -39,11 +41,14 @@ SPECIFICATIONS = {
 }
 
 
-def normalize(sequence, max_length):
-    sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
-    enclosed = tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
+def normalize(sequence, max_length, add_bos_eof=True):
+    if add_bos_eof:
+        sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
+        enclosed = tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
+        sequence = enclosed
+
     padded = tf.keras.preprocessing.sequence.pad_sequences(
-        [enclosed],
+        [sequence],
         maxlen=max_length,
         padding="post",
         truncating="post",
@@ -71,24 +76,36 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
     )
 
     base_path = SPECIFICATIONS["base_ckpt"]
-    full_path = os.path.join(
-        base_path, str(dnn_type), str(tokenizer_type), f"run_id={str(run_id)}"
+    ckpt_path = os.path.join(
+        base_path,
+        str(dnn_type),
+        str(tokenizer_type),
+        f"run_id={run_id}",
+        f"corpus_limit={CORPUS_LIMIT}",
+        f"num_layers={NUM_LAYERS}",
+        f"num_heads={NUM_HEADS}",
+        f"d_model={D_MODEL}",
+        f"dff={DFF}",
+        f"x_len={X_MAX_LEN}",
+        f"y_max_len={Y_MAX_LEN}",
+        f"dropout_rate={DROPOUT_RATE}",
     )
     # Create the path if it doesn't exist
-    pathlib.Path(full_path).mkdir(parents=True, exist_ok=True)
-    logging.info(f"Pipeline path (path={full_path})")
+    pathlib.Path(ckpt_path).mkdir(parents=True, exist_ok=True)
+    logging.info(f"Pipeline path (path={ckpt_path})")
 
     optimizer = transformer_m.optimizer(D_MODEL)
     ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
 
-    ckpt_manager = tf.train.CheckpointManager(ckpt, full_path, max_to_keep=5)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_path, max_to_keep=5)
     if restore:
         if ckpt_manager.latest_checkpoint:
-            # if a checkpoint exists, restore the latest checkpoint.
             ckpt.restore(ckpt_manager.latest_checkpoint)
-            logging.info(f"Latest checkpoint restored (path={full_path})")
+            logging.info(f"Latest checkpoint restored (path={ckpt_path})")
         else:
-            logging.info(f"No checkpoing found (path={full_path})")
+            logging.info(f"No checkpoing found, model initialized (path={ckpt_path})")
+    else:
+        logging.info(f"Restore disabled, model initialized (path={ckpt_path})")
 
     return (
         transformer,
@@ -104,13 +121,10 @@ class Translator(tf.Module):
         if self.transformer is None:
             self.transformer, _, _ = restore_or_init(run_id, dnn_type, tokenizer_type)
 
-    def __call__(self, sentence, real):
+    def __call__(self, sentence):
         # Input sentence is the EHR, hence preparing with BOS and EOS
         sequence = self.tok_x.tokenize(sentence)
         encoder_input = normalize(sequence, X_MAX_LEN)[tf.newaxis]
-
-        real = self.tok_y.tokenize(real)
-        real_nom = normalize(real, Y_MAX_LEN)
 
         bos_token = tf.constant(pip_tok.BOS_TOK, dtype=tf.int64)[tf.newaxis]
         eos_token = tf.constant(pip_tok.EOS_TOK, dtype=tf.int64)[tf.newaxis]
@@ -153,15 +167,41 @@ class Translator(tf.Module):
 
 def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
     translator = Translator(run_id, dnn_type, tokenizer_type)
+    _, tok_y = pip_tok.restore(run_id, tokenizer_type)
+
+    def accuracy(real, pred):
+        accuracies = tf.equal(real, pred)
+
+        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
+        accuracies = tf.math.logical_and(mask, accuracies)
+
+        accuracies = tf.cast(accuracies, dtype=tf.float32)
+        mask = tf.cast(mask, dtype=tf.float32)
+        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
+
+    val_tok_accuracy = tf.keras.metrics.Mean(name="val_tok_accuracy")
+    logging.info(f"Validating model...")
+
+    start = time.time()
     for (i, (x, y)) in enumerate(train_xy):
-        print("-" * 80)
-        print("START")
-        print(f"Iteration (i={i})")
-        # print(f"Input X={x}")
-        print(f"Input Y={y}")
-        translated_text, translated_tokens, attention_weights = translator(x, y)
-        print(f"text={translated_text}, tokens={translated_tokens}")
-        print("END")
+        pred_text, pred_tokens, attention_weights = translator(x)
+
+        pred_tokens = normalize(pred_tokens[0], Y_MAX_LEN, add_bos_eof=False)
+        real_tokens = normalize(tok_y.tokenize(y), Y_MAX_LEN, add_bos_eof=True)
+
+        val_tok_accuracy(accuracy(real_tokens, pred_tokens))
+
+        if i > 0 and i % 1 == 0:
+            time_diff = time.time() - start
+            logging.info(
+                f"Partial result (itetarion={i}, "
+                f"tok_accuracy={val_tok_accuracy.result():.4f}, time_diff={time_diff:.2f}s)"
+            )
+
+    time_diff = time.time() - start
+    logging.info(
+        f"Validation finished (tok_accuracy={val_tok_accuracy.result():.4f}, time_diff={time_diff:.2f}s"
+    )
     return
 
 
@@ -181,15 +221,16 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
-    debug_x = []
-    debug_y = []
-    for i, (x, y) in enumerate(zip(train_x, train_y)):
-       debug_x.append(x)
-       debug_y.append(y)
-       if i >= (1024 - 1):
-           break
-    train_x = debug_x
-    train_y = debug_y
+    if CORPUS_LIMIT is not None and CORPUS_LIMIT != -1:
+        debug_x = []
+        debug_y = []
+        for i, (x, y) in enumerate(zip(train_x, train_y)):
+            debug_x.append(x)
+            debug_y.append(y)
+            if i >= (CORPUS_LIMIT - 1):
+                break
+        train_x = debug_x
+        train_y = debug_y
 
     def prepare_xy():
         train_x_tok = (tok_x.tokenize(x) for x in train_x)
@@ -226,7 +267,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
     )
 
     def loss_function(real, pred):
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
         loss_ = loss_object(real, pred)
 
         mask = tf.cast(mask, dtype=loss_.dtype)
@@ -237,7 +278,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
     def accuracy_function(real, pred):
         accuracies = tf.equal(real, tf.argmax(pred, axis=2))
 
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
         accuracies = tf.math.logical_and(mask, accuracies)
 
         accuracies = tf.cast(accuracies, dtype=tf.float32)
@@ -251,14 +292,6 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
     transformer, optimizer, ckpt_manager = restore_or_init(
         run_id, DnnType.XFMR_XFMR, tokenizer_type, restore=restore
     )
-
-    # DEBUG
-    translator = Translator(
-        run_id, DnnType.XFMR_XFMR, tokenizer_type, transformer=transformer
-    )
-    for vals in zip(train_x, train_y):
-        first_x, first_y = vals
-        break
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
     # execution. The function specializes to the precise shape of the argument
@@ -305,15 +338,6 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
             train_step(inp, tar)
 
             if batch > 0 and batch % 50 == 0:
-                # text, tokens, _ = translator(first_x, first_y)
-                # print("-" * 80)
-                # print("Real")
-                # print(first_y)
-                # print(tok_y.tokenize(first_y))
-                # print("Predicted")
-                # print(text)
-                # print(tokens)
-
                 logging.info(
                     f"Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
@@ -321,7 +345,7 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
 
         if save:
             ckpt_save_path = ckpt_manager.save()
-            logging.info(f"Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}")
+            logging.info(f"Saving checkpoint for epoch {epoch} at {ckpt_save_path}")
 
         logging.info(
             f"Epoch {epoch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"

@@ -15,7 +15,7 @@ N_SPLITS = 4
 
 TOKENIZER_ALLOW_LIST = [
     pip_tok.TokenizerType.SENTENCEPIECE,
-    #pip_tok.TokenizerType.WORDPIECE,
+    # pip_tok.TokenizerType.WORDPIECE,
 ]
 
 
@@ -110,8 +110,6 @@ def cli():
                         tokenizer_type,
                         train_xy,
                         test_xy,
-                        restore=False,
-                        save=False,
                     )
 
     logging.info("Finished")
