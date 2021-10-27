@@ -9,6 +9,7 @@ import enum
 import logging
 import os
 import pathlib as pathlib
+import sklearn
 import tensorflow as tf
 import time
 
@@ -18,7 +19,7 @@ Y_MAX_LEN = 128
 BUFFER_SIZE = 128
 BATCH_SIZE = 8
 # From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 4  # 3 # 4  # 8  # 4 # 6
+NUM_LAYERS = 2  # 3 # 4  # 8  # 4 # 6
 D_MODEL = 512
 DFF = 2048
 NUM_HEADS = 8
@@ -192,15 +193,35 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
         # Normalize the distance
         return distance / max(len(hyphothesis), len(truth))
 
+    def f1_score(real, pred, average):
+        # Make it irrelevant to the order
+        pred = sorted(pred.split(" "))
+        real = sorted(real.split(" "))
+
+        max_length = max(len(pred), len(real))
+
+        # Add padding if necessary
+        pred = pred + [" "] * (max_length - len(pred))
+        real = real + [" "] * (max_length - len(real))
+
+        return sklearn.metrics.f1_score(real, pred, average=average)
+
+
     val_tok_accuracy = tf.keras.metrics.Mean(name="val_tok_accuracy")
     val_edit_distance = tf.keras.metrics.Mean(name="val_edit_distance")
+    val_f1_score_micro = tf.keras.metrics.Mean(name="val_f1_score_micro")
+    val_f1_score_macro = tf.keras.metrics.Mean(name="val_f1_score_macro")
     logging.info(f"Validating model...")
 
     start = time.time()
+    # for (i, (x, y)) in enumerate(test_xy):
     for (i, (x, y)) in enumerate(train_xy):
         pred_text, pred_tokens, attention_weights = translator(x)
 
-        val_edit_distance(edit_distance(y, pred_text.numpy().decode()))
+        pred_text = pred_text.numpy().decode()
+        val_edit_distance(edit_distance(y, pred_text))
+        val_f1_score_micro(f1_score(y, pred_text, 'micro'))
+        val_f1_score_macro(f1_score(y, pred_text, 'macro'))
 
         pred_tokens = normalize(pred_tokens[0], Y_MAX_LEN, add_bos_eof=False)
         real_tokens = normalize(tok_y.tokenize(y), Y_MAX_LEN, add_bos_eof=True)
@@ -212,6 +233,8 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
                 f"Partial result (itetarion={i}, "
                 f"tok_accuracy={val_tok_accuracy.result():.4f}, "
                 f"edit_distance={val_edit_distance.result():.4f}, "
+                f"f1_score_micro={val_f1_score_micro.result():.4f}, "
+                f"f1_score_macro={val_f1_score_macro.result():.4f}, "
                 f"time_diff={time_diff:.2f}s)"
             )
 
@@ -220,9 +243,10 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
         f"Validation finished ("
         f"tok_accuracy={val_tok_accuracy.result():.4f}, "
         f"edit_distance={val_edit_distance.result():.4f}, "
+        f"f1_score_micro={val_f1_score_micro.result():.4f}, "
+        f"f1_score_macro={val_f1_score_macro.result():.4f}, "
         f"time_diff={time_diff:.2f}s"
     )
-    return
 
 
 def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
