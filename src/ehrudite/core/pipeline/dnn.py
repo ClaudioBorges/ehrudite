@@ -24,7 +24,7 @@ D_MODEL = 512
 DFF = 2048
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
-ACCURACY_TH = 0.85
+ACCURACY_TH = 0.90
 # Used for testing a subset of the entire corpus. Use -1 to train with full corpus
 CORPUS_LIMIT = -1
 
@@ -151,6 +151,8 @@ class Translator(tf.Module):
             if predicted_id == eos_token:
                 break
 
+        # import pdb
+        # pdb.set_trace()
         output = tf.transpose(output_array.stack())
         # output.shape(1, tokens)
         text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
@@ -206,7 +208,6 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
 
         return sklearn.metrics.f1_score(real, pred, average=average)
 
-
     val_tok_accuracy = tf.keras.metrics.Mean(name="val_tok_accuracy")
     val_edit_distance = tf.keras.metrics.Mean(name="val_edit_distance")
     val_f1_score_micro = tf.keras.metrics.Mean(name="val_f1_score_micro")
@@ -214,14 +215,14 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
     logging.info(f"Validating model...")
 
     start = time.time()
-    # for (i, (x, y)) in enumerate(test_xy):
-    for (i, (x, y)) in enumerate(train_xy):
+    for (i, (x, y)) in enumerate(test_xy):
+        # for (i, (x, y)) in enumerate(train_xy):
         pred_text, pred_tokens, attention_weights = translator(x)
 
         pred_text = pred_text.numpy().decode()
         val_edit_distance(edit_distance(y, pred_text))
-        val_f1_score_micro(f1_score(y, pred_text, 'micro'))
-        val_f1_score_macro(f1_score(y, pred_text, 'macro'))
+        val_f1_score_micro(f1_score(y, pred_text, "micro"))
+        val_f1_score_macro(f1_score(y, pred_text, "macro"))
 
         pred_tokens = normalize(pred_tokens[0], Y_MAX_LEN, add_bos_eof=False)
         real_tokens = normalize(tok_y.tokenize(y), Y_MAX_LEN, add_bos_eof=True)
@@ -236,6 +237,10 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
                 f"f1_score_micro={val_f1_score_micro.result():.4f}, "
                 f"f1_score_macro={val_f1_score_macro.result():.4f}, "
                 f"time_diff={time_diff:.2f}s)"
+            )
+            logging.info(
+                f"Partial result content (real_text={y}, pred_text={pred_text}, "
+                f"real_tokens={real_tokens}, pred_tokens={pred_tokens})"
             )
 
     time_diff = time.time() - start
