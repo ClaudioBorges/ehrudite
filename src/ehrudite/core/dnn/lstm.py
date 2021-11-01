@@ -1,164 +1,236 @@
 """Long Short-Term Memory (LSTM)"""
+# Reference: https://www.tensorflow.org/text/tutorials/nmt_with_attention
 
 import numpy as np
 import tensorflow as tf
 
 
-class Transformer(tf.keras.Model):
+class Seq2SeqBiLstmAttn(tf.keras.Model):
     def __init__(
         self,
-        num_layers,
-        d_model,
-        num_heads,
-        dff,
+        embedding_dim,
+        units,
         input_vocab_size,
         target_vocab_size,
-        pe_input,
-        pe_target,
-        rate=0.1,
     ):
         super().__init__()
-        self.encoder = Encoder(
-            num_layers, d_model, num_heads, dff, input_vocab_size, pe_input, rate
-        )
-
-        self.decoder = Decoder(
-            num_layers, d_model, num_heads, dff, target_vocab_size, pe_target, rate
-        )
-
+        self.encoder = Encoder(input_vocab_size, embedding_dim, units)
+        self.decoder = Decoder(target_vocab_size, embedding_dim, units)
         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+        self.shape_checker = ShapeChecker()
 
     def call(self, inputs, training):
         # Keras models prefer if you pass all your inputs in the first argument
         inp, tar = inputs
+        self.shape_checker(inp, ("batch", "s"))
+        self.shape_checker(tar, ("batch", "t"))
 
-        enc_padding_mask, look_ahead_mask, dec_padding_mask = self.create_masks(
-            inp, tar
+        input_mask, target_mask = self.create_masks(inp, tar)
+
+        enc_output, enc_states = self.encoder(inp, training)
+        self.shape_checker(enc_output, ("batch", "s", "enc_units"))
+        self.shape_checker(enc_states[0], ("batch", "enc_units"))
+        self.shape_checker(enc_states[1], ("batch", "enc_units"))
+
+        dec_attn_vector, dec_attn_weights, dec_states = self.decoder(
+            tar, enc_output, target_mask, initial_state=enc_states
         )
+        self.shape_checker(dec_attn_vector, ("batch", "t", "dec_units"))
+        self.shape_checker(dec_attn_weights, ("batch", "t", "s"))
+        self.shape_checker(dec_states[0], ("batch", "enc_units"))
+        self.shape_checker(dec_states[1], ("batch", "enc_units"))
 
-        enc_output = self.encoder(
-            inp, training, enc_padding_mask
-        )  # (batch_size, inp_seq_len, d_model)
+        logits = self.final_layer(dec_attn_vector)
+        shape_checker(logits, ("batch", "t", "output_vocab_size"))
 
-        # dec_output.shape == (batch_size, tar_seq_len, d_model)
-        dec_output, attention_weights = self.decoder(
-            tar, enc_output, training, look_ahead_mask, dec_padding_mask
-        )
-
-        final_output = self.final_layer(
-            dec_output
-        )  # (batch_size, tar_seq_len, target_vocab_size)
-        return final_output, attention_weights
+        return final_output, attn_weights
 
     def create_masks(self, inp, tar):
-        # Encoder padding mask
-        enc_padding_mask = _create_padding_mask(inp)
+        self.shape_checker(inp, ("batch", "s"))
+        self.shape_checker(tar, ("batch", "t"))
 
-        # Used in the 2nd attention block in the decoder
-        # This padding mask is used to mask the encoder outputs.
-        dec_padding_mask = _create_padding_mask(inp)
+        # Convert IDs to masks.
+        input_mask = inp != 0
+        self.shape_checker(input_mask, ("batch", "s"))
 
-        # Used in the 1st attention block in the decoder.
-        # It is used to pad and mask future tokens in the input received by
-        # the decoder.
-        look_ahead_mask = _create_look_ahead_mask(tf.shape(tar)[1])
-        dec_target_padding_mask = _create_padding_mask(tar)
-        look_ahead_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-        return enc_padding_mask, look_ahead_mask, dec_padding_mask
+        target_mask = tar != 0
+        self.shape_checker(target_mask, ("batch", "t"))
+
+        return input_mask, target_mask
 
 
 class Encoder(tf.keras.layers.Layer):
-    """Bi-LSTM encoder
-
-    Contains:
-        1. Input Embedding
-        3. N encoder layers
-    """
-
-    def __init__(
-        self,
-        num_layers,
-        n_hidden,
-        input_vocab_size,
-    ):
+    def __init__(self, input_vocab_size, embedding_dim, enc_units):
         super(Encoder, self).__init__()
 
-        self.n_hidden = n_hidden
-        assert n_hidden % 2 == 0, "Hidden state must be divisable by 2"
+        self.enc_units = enc_units
+        assert enc_units % 2 == 0, "Hidden state must be divisable by 2"
 
-        self.num_layers = num_layers
-        self.embedding = tf.keras.layers.Embedding(input_vocab_size, n_hidden)
-        self.enc_layers = [
-            tf.keras.layers.Bidirectional(
-                tf.keras.layers.LSTM(
-                    int(n_hidden / 2), return_sequences=True, return_state=True
-                )
+        # The embedding layer converts tokens to vectors
+        self.embedding = tf.keras.layers.Embedding(input_vocab_size, embedding_dim)
+
+        # The RNN layer processes those vectors sequentially.
+        self.bi_lstm = tf.keras.layers.Bidirectional(
+            tf.keras.layers.LSTM(
+                int(enc_units / 2), return_sequences=True, return_state=True
             )
-            for _ in range(num_layers)
-        ]
+        )
 
-    def call(self, x, training, return_extras=False):
-        x = self.embedding(x)  # (batch_size, input_seq_len, n_hidden)
+    def call(self, x, training, initial_state=None):
+        shape_checker = ShapeChecker()
+        shape_checker(x, ("batch", "s"))
 
-        state_hs = []
-        state_cs = []
-        for i in range(self.num_layers):
-            x, forward_h, forward_c, backward_h, backward_c = self.enc_layers[i](
-                x, training=training
-            )
-            state_hs.append(tf.keras.layers.Concatenate()([forward_h, backward_h]))
-            state_cs.append(tf.keras.layers.Concatenate()([forward_c, backward_c]))
+        # 2. The embedding layer looks up the embedding for each token.
+        vectors = self.embedding(x)
+        shape_checker(vectors, ("batch", "s", "embed_dim"))
 
-        if return_extras is True:
-            return x, state_hs, state_cs
-        return x  # (batch_size, input_seq_len, n_hidden * 2)
+        # 3. The RNN processes the embedding sequence.
+        output, forward_h, forward_c, backward_h, backward_c = self.bi_lstm(
+            vectors, training=training, initial_state=initial_state
+        )
+        state_h = tf.keras.layers.Concatenate()([forward_h, backward_h])
+        state_c = tf.keras.layers.Concatenate()([forward_c, backward_c])
+
+        shape_checker(output, ("batch", "s", "enc_units"))
+        shape_checker(state_h, ("batch", "enc_units"))
+        shape_checker(state_c, ("batch", "enc_units"))
+
+        # 4. Returns the new sequence and its state.
+        return output, (state_h, state_c)
 
 
 class Decoder(tf.keras.layers.Layer):
-    def __init__(
-        self,
-        num_layers,
-        d_model,
-        num_heads,
-        dff,
-        target_vocab_size,
-        maximum_position_encoding,
-        rate=0.1,
-    ):
+    def __init__(self, output_vocab_size, embedding_dim, dec_units):
         super(Decoder, self).__init__()
+        self.dec_units = dec_units
+        self.output_vocab_size = output_vocab_size
+        self.embedding_dim = embedding_dim
 
-        self.d_model = d_model
-        self.num_layers = num_layers
+        # For Step 1. The embedding layer convets token IDs to vectors
+        self.embedding = tf.keras.layers.Embedding(
+            self.output_vocab_size, embedding_dim
+        )
 
-        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-        self.pos_encoding = _positional_encoding(maximum_position_encoding, d_model)
+        # For Step 2. The RNN keeps track of what's been generated so far.
+        self.lstm = tf.keras.layers.LSTM(
+            self.dec_units,
+            return_sequences=True,
+            return_state=True,
+        )  # recurrent_initializer='glorot_uniform')
 
-        self.dec_layers = [
-            DecoderLayer(d_model, num_heads, dff, rate) for _ in range(num_layers)
-        ]
-        self.dropout = tf.keras.layers.Dropout(rate)
+        # For step 3. The RNN output will be the query for the attention layer.
+        self.attention = BahdanauAttention(self.dec_units)
 
-    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+        # For step 4. Eqn. (3): converting `ct` to `at`
+        self.Wc = tf.keras.layers.Dense(
+            dec_units, activation=tf.math.tanh, use_bias=False
+        )
 
-        seq_len = tf.shape(x)[1]
-        attention_weights = {}
+    def call(self, x, enc_output, mask, initial_state=None):
+        shape_checker = ShapeChecker()
+        shape_checker(x, ("batch", "t"))
+        shape_checker(enc_output, ("batch", "s", "enc_units"))
+        shape_checker(mask, ("batch", "s"))
 
-        x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        x += self.pos_encoding[:, :seq_len, :]
+        if initial_state is not None:
+            shape_checker(initial_state[0], ("batch", "dec_units"))
+            shape_checker(initial_state[1], ("batch", "dec_units"))
 
-        x = self.dropout(x, training=training)
+        # Step 1. Lookup the embeddings
+        vectors = self.embedding(x)
+        shape_checker(vectors, ("batch", "t", "embedding_dim"))
 
-        for i in range(self.num_layers):
-            x, block1, block2 = self.dec_layers[i](
-                x, enc_output, training, look_ahead_mask, padding_mask
+        # Step 2. Process one step with the RNN
+        rnn_output, state_h, state_c = self.lstm(vectors, initial_state=initial_state)
+
+        shape_checker(rnn_output, ("batch", "t", "dec_units"))
+        shape_checker(state_h, ("batch", "dec_units"))
+        shape_checker(state_c, ("batch", "dec_units"))
+
+        # Step 3. Use the RNN output as the query for the attention over the
+        # encoder output.
+        context_vector, attn_weights = self.attention(
+            query=rnn_output, value=enc_output, mask=mask
+        )
+        shape_checker(context_vector, ("batch", "t", "dec_units"))
+        shape_checker(attn_weights, ("batch", "t", "s"))
+
+        # Step 4. Eqn. (3): Join the context_vector and rnn_output
+        #     [ct; ht] shape: (batch t, value_units + query_units)
+        context_and_rnn_output = tf.concat([context_vector, rnn_output], axis=-1)
+
+        # Step 4. Eqn. (3): `at = tanh(Wc@[ct; ht])`
+        attn_vector = self.Wc(context_and_rnn_output)
+        shape_checker(attn_vector, ("batch", "t", "dec_units"))
+
+        return attn_vector, attn_weights, (state_h, state_c)
+
+
+class BahdanauAttention(tf.keras.layers.Layer):
+    def __init__(self, units):
+        super().__init__()
+        # For Eqn. (4), the  Bahdanau attention
+        self.W1 = tf.keras.layers.Dense(units, use_bias=False)
+        self.W2 = tf.keras.layers.Dense(units, use_bias=False)
+
+        self.attention = tf.keras.layers.AdditiveAttention()
+
+    def call(self, query, value, mask):
+        shape_checker = ShapeChecker()
+        shape_checker(query, ("batch", "t", "query_units"))
+        shape_checker(value, ("batch", "s", "value_units"))
+        shape_checker(mask, ("batch", "s"))
+
+        # From Eqn. (4), `W1@ht`.
+        w1_query = self.W1(query)
+        shape_checker(w1_query, ("batch", "t", "attn_units"))
+
+        # From Eqn. (4), `W2@hs`.
+        w2_key = self.W2(value)
+        shape_checker(w2_key, ("batch", "s", "attn_units"))
+
+        query_mask = tf.ones(tf.shape(query)[:-1], dtype=bool)
+        value_mask = mask
+
+        context_vector, attn_weights = self.attention(
+            inputs=[w1_query, value, w2_key],
+            mask=[query_mask, value_mask],
+            return_attention_scores=True,
+        )
+        shape_checker(context_vector, ("batch", "t", "value_units"))
+        shape_checker(attn_weights, ("batch", "t", "s"))
+
+        return context_vector, attn_weights
+
+
+class ShapeChecker:
+    def __init__(self):
+        # Keep a cache of every axis-name seen
+        self.shapes = {}
+
+    def __call__(self, tensor, names, broadcast=False):
+        if not tf.executing_eagerly():
+            return
+
+        if isinstance(names, str):
+            names = (names,)
+
+        shape = tf.shape(tensor)
+        rank = tf.rank(tensor)
+
+        if rank != len(names):
+            raise ValueError(
+                f"Rank mismatch:\n"
+                f"    found {rank}: {shape.numpy()}\n"
+                f"    expected {len(names)}: {names}\n"
             )
 
-        attention_weights[f"decoder_layer{i+1}_block1"] = block1
-        attention_weights[f"decoder_layer{i+1}_block2"] = block2
-
-        # x.shape == (batch_size, target_seq_len, d_model)
-        return x, attention_weights
+        for i, name in enumerate(names):
+            if isinstance(name, int):
+                old_dim = name
+            else:
+                old_dim = self.shapes.get(name, None)
+            new_dim = shape[i]
 
 
 def optimizer(d_model):

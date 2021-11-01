@@ -1,6 +1,6 @@
 """Transformer from 'Attention is all you need' (Vaswani et al., 2017)"""
 # Reference: https://www.tensorflow.org/text/tutorials/transformer
-# referece: https://keras.io/examples/nlp/text_classification_with_transformer/
+# Reference: https://keras.io/examples/nlp/text_classification_with_transformer/
 
 import numpy as np
 import tensorflow as tf

@@ -259,7 +259,9 @@ def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
         train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
 
 
-def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True):
+def train_xfmr_xfmr(
+    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
+):
     logging.info(
         f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
         f"tok={tokenizer_type})"
@@ -372,9 +374,15 @@ def train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, restore=True, sav
     epoch = 0
     while 1:
         epoch += 1
-        if train_accuracy.result() >= ACCURACY_TH:
+        if n_epochs is None:
+            if train_accuracy.result() >= ACCURACY_TH:
+                logging.info(
+                    f"Accuracy reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                )
+                break
+        elif n_epochs == epoch - 1:
             logging.info(
-                f"Accuracy reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                f"Epoch reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
             )
             break
 

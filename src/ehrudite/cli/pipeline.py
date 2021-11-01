@@ -104,12 +104,14 @@ def cli():
                         test_xy,
                     )
                 else:
+                    epochs = [13, 2, 15, 4]
                     pip_dnn.train(
                         run_id,
                         dnn_type,
                         tokenizer_type,
                         train_xy,
                         test_xy,
+                        n_epochs=epochs[run_id],
                     )
 
     logging.info("Finished")
