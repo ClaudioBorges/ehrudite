@@ -19,7 +19,7 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
         self.shape_checker = ShapeChecker()
 
-    def call(self, inputs, training):
+    def call(self, inputs, training, enc_output=None, dec_initial_states=None):
         # Keras models prefer if you pass all your inputs in the first argument
         inp, tar = inputs
         self.shape_checker(inp, ("batch", "s"))
@@ -27,17 +27,20 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
 
         input_mask, target_mask = self.create_masks(inp, tar)
 
-        enc_output, enc_states = self.encoder(inp, training)
-        self.shape_checker(enc_output, ("batch", "s", "enc_units"))
-        self.shape_checker(enc_states[0], ("batch", "enc_units"))
-        self.shape_checker(enc_states[1], ("batch", "enc_units"))
+        if enc_output is None:
+            enc_output, enc_states = self.encoder(inp, training)
+            self.shape_checker(enc_output, ("batch", "s", "enc_units"))
+            self.shape_checker(enc_states[0], ("batch", "enc_units"))
+            self.shape_checker(enc_states[1], ("batch", "enc_units"))
+            # Set Decoder initial state as Encoder (as original paper)
+            dec_initial_states = enc_states
 
         dec_attn_vector, dec_attn_weights, dec_states = self.decoder(
             tar,
             enc_output,
             input_mask,
             target_mask,
-            initial_state=enc_states,
+            initial_state=dec_initial_states,
         )
         self.shape_checker(dec_attn_vector, ("batch", "t", "dec_units"))
         self.shape_checker(dec_attn_weights, ("batch", "t", "s"))
@@ -47,7 +50,7 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         logits = self.final_layer(dec_attn_vector)
         self.shape_checker(logits, ("batch", "t", "output_vocab_size"))
 
-        return logits, dec_attn_weights
+        return logits, dec_attn_weights, enc_output, dec_states
 
     def create_masks(self, inp, tar):
         self.shape_checker(inp, ("batch", "s"))

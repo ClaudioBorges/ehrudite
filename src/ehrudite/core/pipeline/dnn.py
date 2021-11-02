@@ -257,22 +257,20 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
 def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
     if dnn_type == DnnType.XFMR_XFMR:
         train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
+    elif dnn_type == DnnType.LSTM_LSTM:
+        train_lstm_lstm(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
 
 
-def train_xfmr_xfmr(
-    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
-):
+def tokenize_and_batch(run_id, tokenizer_type, train_xy):
     logging.info(
-        f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
-        f"tok={tokenizer_type})"
+        "Building dataset (run_id={run_id}, tokenizer_type={tokenizer_type})..."
     )
     train_x, train_y = pip.unpack_2d(train_xy)
-
-    logging.info("Restoring tokenizer...")
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
     if CORPUS_LIMIT is not None and CORPUS_LIMIT != -1:
+        logging.info("Corpus limited (corpus_limit={CORPUS_LIMIT})")
         debug_x = []
         debug_y = []
         for i, (x, y) in enumerate(zip(train_x, train_y)):
@@ -311,7 +309,18 @@ def train_xfmr_xfmr(
             ds.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
         )
 
-    train_batches = make_batches(train_xy_tok_ds)
+    return make_batches(train_xy_tok_ds)
+
+
+def train_xfmr_xfmr(
+    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
+):
+    logging.info(
+        f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
+        f"tok={tokenizer_type})"
+    )
+
+    train_batches = tokenize_and_batch(run_id, tokenizer_type, train_xy)
 
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
