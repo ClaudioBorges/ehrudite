@@ -74,4 +74,4 @@ def test_seq2seq_bilstm_attn():
     )
 
     output, _ = model([temp_input, temp_target], training=False)
-    assert fn_out.shape == (batch_size, target_seq_len, target_vocab_size)
+    assert output.shape == (batch_size, target_seq_len, target_vocab_size)

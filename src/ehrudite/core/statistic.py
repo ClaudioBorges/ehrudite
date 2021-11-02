@@ -1,7 +1,10 @@
 """Ehrpreper statistic"""
 
+
+from collections import Counter
 from tqdm import tqdm
 import ehrpreper
+import ehrudite.core.pipeline as pip
 import ehrudite.core.text as er_text
 import ehrudite.core.tokenizer.sentencepiece as sentencepiece
 import ehrudite.core.tokenizer.wordpiece as wordpiece
@@ -165,6 +168,49 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
         plt.title("Probability distribution of the annotations' number per content")
         plt.savefig(os.path.join(output_path, f"ehrpreper-annotations-per-content-png"))
 
+        # Fine-grain statistic
+        k_folded = pip.ehrpreper_k_fold_gen(ehrpreper_file_name)
+        for run_id, (
+            train_xy,
+            test_xy,
+        ) in enumerate(k_folded):
+            _, train_y = pip.unpack_2d(train_xy)
+            _, test_y = pip.unpack_2d(test_xy)
+
+            def make_counter(y):
+                return Counter(
+                    [
+                        annotation
+                        for annotations in y
+                        for annotation in annotations.split()
+                    ]
+                )
+
+            def make_stats(name, cnt):
+                cnt_vals = list(cnt.values())
+                logging.info(
+                    f"Annotations' counter for {name} run_id={run_id}"
+                    + f"\n\tmean={np.mean(cnt_vals)}"
+                    + f"\n\tstd={np.std(cnt_vals)}"
+                    + f"\n\ttotal={len(cnt_vals)}"
+                    + f"\n\tmin={np.min(cnt_vals)}"
+                    + f"\n\tmax={np.max(cnt_vals)}"
+                    + f"\n\thistogram={np.histogram(cnt_vals, density=True)}"
+                    + f"\n\ttop20={cnt.most_common(20)}"
+                )
+
+            cnt_train = make_counter(train_y)
+            cnt_test = make_counter(test_y)
+            make_stats("TRAIN", cnt_train)
+            make_stats("TEST", cnt_test)
+
+            unprecedent = [elm for elm in cnt_test if elm not in cnt_train]
+            logging.info(
+                f"Number of unique TEST annotation run_id={run_id}"
+                + f"\n\tn_unprecedent={len(unprecedent)}"
+                + f"\n\tunprecedent={set(unprecedent)}"
+            )
+
     def _content_stat(contents):
         n_len_contents = [len(content) for content in contents]
         logging.info(
@@ -191,4 +237,4 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
     contents = _load_contents_from_ehrpreper(ehrpreper_file_name)
 
     _annotations_stat(annotations_collections)
-    _content_stat(contents)
+    # _content_stat(contents)

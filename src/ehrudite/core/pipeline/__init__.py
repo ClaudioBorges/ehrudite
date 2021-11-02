@@ -48,7 +48,7 @@ def ehrpreper_k_fold_gen(ehrpreper_file, n_splits=4):
     ) in enumerate(kf.split(source_idxs)):
         logging.debug(
             f"Generating k-fold"
-            + f"(index={i}, len(train)={len(train_idxs)}, len(test)={len(test_idxs)}"
+            + f"(index={i}, len(train)={len(train_idxs)}, len(test)={len(test_idxs)})"
         )
 
         def k_fold_builder(data, idxs):

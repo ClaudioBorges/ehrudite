@@ -33,7 +33,11 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.shape_checker(enc_states[1], ("batch", "enc_units"))
 
         dec_attn_vector, dec_attn_weights, dec_states = self.decoder(
-            tar, enc_output, target_mask, initial_state=enc_states
+            tar,
+            enc_output,
+            input_mask,
+            target_mask,
+            initial_state=enc_states,
         )
         self.shape_checker(dec_attn_vector, ("batch", "t", "dec_units"))
         self.shape_checker(dec_attn_weights, ("batch", "t", "s"))
@@ -41,9 +45,9 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.shape_checker(dec_states[1], ("batch", "enc_units"))
 
         logits = self.final_layer(dec_attn_vector)
-        shape_checker(logits, ("batch", "t", "output_vocab_size"))
+        self.shape_checker(logits, ("batch", "t", "output_vocab_size"))
 
-        return final_output, attn_weights
+        return logits, dec_attn_weights
 
     def create_masks(self, inp, tar):
         self.shape_checker(inp, ("batch", "s"))
@@ -57,6 +61,22 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.shape_checker(target_mask, ("batch", "t"))
 
         return input_mask, target_mask
+
+    def _create_masks(self, inp, tar):
+        # Encoder padding mask
+        enc_padding_mask = _create_padding_mask(inp)
+
+        # Used in the 2nd attention block in the decoder
+        # This padding mask is used to mask the encoder outputs.
+        dec_padding_mask = _create_padding_mask(inp)
+
+        # Used in the 1st attention block in the decoder.
+        # It is used to pad and mask future tokens in the input received by
+        # the decoder.
+        look_ahead_mask = _create_look_ahead_mask(tf.shape(tar)[1])
+        dec_target_padding_mask = _create_padding_mask(tar)
+        look_ahead_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+        return enc_padding_mask, look_ahead_mask, dec_padding_mask
 
 
 class Encoder(tf.keras.layers.Layer):
@@ -126,11 +146,19 @@ class Decoder(tf.keras.layers.Layer):
             dec_units, activation=tf.math.tanh, use_bias=False
         )
 
-    def call(self, x, enc_output, mask, initial_state=None):
+    def call(
+        self,
+        x,
+        enc_output,
+        enc_padding_mask,
+        dec_padding_mask=None,
+        look_ahead_mask=None,
+        initial_state=None,
+    ):
         shape_checker = ShapeChecker()
         shape_checker(x, ("batch", "t"))
         shape_checker(enc_output, ("batch", "s", "enc_units"))
-        shape_checker(mask, ("batch", "s"))
+        shape_checker(enc_padding_mask, ("batch", "s"))
 
         if initial_state is not None:
             shape_checker(initial_state[0], ("batch", "dec_units"))
@@ -141,7 +169,9 @@ class Decoder(tf.keras.layers.Layer):
         shape_checker(vectors, ("batch", "t", "embedding_dim"))
 
         # Step 2. Process one step with the RNN
-        rnn_output, state_h, state_c = self.lstm(vectors, initial_state=initial_state)
+        rnn_output, state_h, state_c = self.lstm(
+            vectors, mask=dec_padding_mask, initial_state=initial_state
+        )
 
         shape_checker(rnn_output, ("batch", "t", "dec_units"))
         shape_checker(state_h, ("batch", "dec_units"))
@@ -150,7 +180,7 @@ class Decoder(tf.keras.layers.Layer):
         # Step 3. Use the RNN output as the query for the attention over the
         # encoder output.
         context_vector, attn_weights = self.attention(
-            query=rnn_output, value=enc_output, mask=mask
+            query=rnn_output, value=enc_output, mask=enc_padding_mask
         )
         shape_checker(context_vector, ("batch", "t", "dec_units"))
         shape_checker(attn_weights, ("batch", "t", "s"))

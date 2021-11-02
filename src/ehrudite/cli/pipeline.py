@@ -104,7 +104,7 @@ def cli():
                         test_xy,
                     )
                 else:
-                    epochs = [13, 2, 15, 4]
+                    epochs = [19, 22, 0, 265]
                     pip_dnn.train(
                         run_id,
                         dnn_type,
