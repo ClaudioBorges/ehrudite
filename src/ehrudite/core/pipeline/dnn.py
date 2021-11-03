@@ -85,6 +85,7 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
             pe_target=Y_MAX_LEN,
             rate=XMFR_XFMR_DROPOUT_RATE,
         )
+        optimizer = transformer_m.optimizer(XFMR_XFMR_D_MODEL)
         ckpt_path = os.path.join(
             base_path,
             str(dnn_type),
@@ -99,7 +100,6 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
             f"y_max_len={Y_MAX_LEN}",
             f"dropout_rate={XMFR_XFMR_DROPOUT_RATE}",
         )
-        optimizer = transformer_m.optimizer(XFMR_XFMR_D_MODEL)
 
     elif dnn_type == DnnType.LSTM_LSTM:
         model = bi_lstm_attn_m.Seq2SeqBiLstmAttn(
@@ -108,6 +108,7 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
             input_vocab_size=tok_x.vocab_size(),
             target_vocab_size=tok_y.vocab_size(),
         )
+        optimizer = tf.optimizers.Adam()
         ckpt_path = os.path.join(
             base_path,
             str(dnn_type),
@@ -119,13 +120,12 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
             f"x_len={X_MAX_LEN}",
             f"y_max_len={Y_MAX_LEN}",
         )
-        optimizer = tf.optimizers.Adam()
 
     # Create the path if it doesn't exist
     pathlib.Path(ckpt_path).mkdir(parents=True, exist_ok=True)
     logging.info(f"Pipeline path (path={ckpt_path})")
 
-    ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer)
+    ckpt = tf.train.Checkpoint(transformer=model, optimizer=optimizer)
 
     ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_path, max_to_keep=5)
     if restore:
