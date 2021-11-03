@@ -37,6 +37,12 @@ def make_parser():
         help=r"train transformer-transformer",
     )
     parser.add_argument(
+        "-pll",
+        "--pipeline_lstm_lstm",
+        action="store_true",
+        help=r"train lstm-lstm",
+    )
+    parser.add_argument(
         "-t",
         "--test",
         action="store_true",
@@ -85,16 +91,8 @@ def cli():
         logging.info(f"Running k_fold (run_id={run_id})")
         # Run for each tokenizer
         for tokenizer_type in TOKENIZER_ALLOW_LIST:
-            # Tokenizer
-            if args.pipeline_tokenizer:
-                pip_tok.train(
-                    run_id,
-                    tokenizer_type,
-                    train_xy,
-                )
-            # DNN Training and validate
-            elif args.pipeline_xfmr_xfmr:
-                dnn_type = pip_dnn.DnnType.XFMR_XFMR
+
+            def run_dnn_pipeline(dnn_type, n_epochs=[0, 0, 0, 265]):
                 if args.test:
                     pip_dnn.validate(
                         run_id,
@@ -104,14 +102,27 @@ def cli():
                         test_xy,
                     )
                 else:
-                    epochs = [19, 22, 0, 265]
                     pip_dnn.train(
                         run_id,
                         dnn_type,
                         tokenizer_type,
                         train_xy,
                         test_xy,
-                        n_epochs=epochs[run_id],
+                        n_epochs=n_epochs[run_id],
                     )
+
+            # Tokenizer
+            if args.pipeline_tokenizer:
+                pip_tok.train(
+                    run_id,
+                    tokenizer_type,
+                    train_xy,
+                )
+            # DNN Training and validate - XFMR-XFMR
+            elif args.pipeline_xfmr_xfmr:
+                run_dnn_pipeline(pip_dnn.DnnType.XFMR_XFMR)
+            # DNN Training and validate - LSTM-LSTM
+            elif args.pipeline_lstm_lstm:
+                run_dnn_pipeline(pip_dnn.DnnType.LSTM_LSTM)
 
     logging.info("Finished")

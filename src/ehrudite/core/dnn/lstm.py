@@ -1,6 +1,8 @@
 """Long Short-Term Memory (LSTM)"""
 # Reference: https://www.tensorflow.org/text/tutorials/nmt_with_attention
 
+import ehrudite.core.helper as er_helper
+import ehrudite.core.pipeline.tokenizer as pip_tok
 import numpy as np
 import tensorflow as tf
 
@@ -17,7 +19,7 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.encoder = Encoder(input_vocab_size, embedding_dim, units)
         self.decoder = Decoder(target_vocab_size, embedding_dim, units)
         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
-        self.shape_checker = ShapeChecker()
+        self.shape_checker = er_helper.ShapeChecker()
 
     def call(self, inputs, training, enc_output=None, dec_initial_states=None):
         # Keras models prefer if you pass all your inputs in the first argument
@@ -57,10 +59,10 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.shape_checker(tar, ("batch", "t"))
 
         # Convert IDs to masks.
-        input_mask = inp != 0
+        input_mask = inp != pip_tok.PAD_TOK
         self.shape_checker(input_mask, ("batch", "s"))
 
-        target_mask = tar != 0
+        target_mask = tar != pip_tok.PAD_TOK
         self.shape_checker(target_mask, ("batch", "t"))
 
         return input_mask, target_mask
@@ -100,7 +102,7 @@ class Encoder(tf.keras.layers.Layer):
         )
 
     def call(self, x, training, initial_state=None):
-        shape_checker = ShapeChecker()
+        shape_checker = er_helper.ShapeChecker()
         shape_checker(x, ("batch", "s"))
 
         # 2. The embedding layer looks up the embedding for each token.
@@ -158,7 +160,7 @@ class Decoder(tf.keras.layers.Layer):
         look_ahead_mask=None,
         initial_state=None,
     ):
-        shape_checker = ShapeChecker()
+        shape_checker = er_helper.ShapeChecker()
         shape_checker(x, ("batch", "t"))
         shape_checker(enc_output, ("batch", "s", "enc_units"))
         shape_checker(enc_padding_mask, ("batch", "s"))
@@ -209,7 +211,7 @@ class BahdanauAttention(tf.keras.layers.Layer):
         self.attention = tf.keras.layers.AdditiveAttention()
 
     def call(self, query, value, mask):
-        shape_checker = ShapeChecker()
+        shape_checker = er_helper.ShapeChecker()
         shape_checker(query, ("batch", "t", "query_units"))
         shape_checker(value, ("batch", "s", "value_units"))
         shape_checker(mask, ("batch", "s"))
@@ -234,36 +236,6 @@ class BahdanauAttention(tf.keras.layers.Layer):
         shape_checker(attn_weights, ("batch", "t", "s"))
 
         return context_vector, attn_weights
-
-
-class ShapeChecker:
-    def __init__(self):
-        # Keep a cache of every axis-name seen
-        self.shapes = {}
-
-    def __call__(self, tensor, names, broadcast=False):
-        if not tf.executing_eagerly():
-            return
-
-        if isinstance(names, str):
-            names = (names,)
-
-        shape = tf.shape(tensor)
-        rank = tf.rank(tensor)
-
-        if rank != len(names):
-            raise ValueError(
-                f"Rank mismatch:\n"
-                f"    found {rank}: {shape.numpy()}\n"
-                f"    expected {len(names)}: {names}\n"
-            )
-
-        for i, name in enumerate(names):
-            if isinstance(name, int):
-                old_dim = name
-            else:
-                old_dim = self.shapes.get(name, None)
-            new_dim = shape[i]
 
 
 def optimizer(d_model):

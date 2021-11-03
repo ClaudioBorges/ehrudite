@@ -1,6 +1,7 @@
 """ehrudite tokenizer pipeline"""
 
 import Levenshtein
+import ehrudite.core.dnn.lstm as bi_lstm_attn_m
 import ehrudite.core.dnn.transformer as transformer_m
 import ehrudite.core.pipeline as pip
 import ehrudite.core.pipeline.tokenizer as pip_tok
@@ -18,17 +19,23 @@ X_MAX_LEN = 2048
 Y_MAX_LEN = 128
 BUFFER_SIZE = 128
 BATCH_SIZE = 8
-# From https://www.tensorflow.org/text/tutorials/transformer
-NUM_LAYERS = 2  # 3 # 4  # 8  # 4 # 6
-D_MODEL = 512
-DFF = 2048
-NUM_HEADS = 8
-DROPOUT_RATE = 0.1
 ACCURACY_TH = 0.90
 # Used for testing a subset of the entire corpus. Use -1 to train with full corpus
 CORPUS_LIMIT = -1
-
 MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
+
+
+# From https://www.tensorflow.org/text/tutorials/transformer
+XFMR_XFMR_NUM_LAYERS = 2  # 3 # 4  # 8  # 4 # 6
+XFMR_XFMR_D_MODEL = 512
+XFMR_XFMR_DFF = 2048
+XFMR_XFMR_NUM_HEADS = 8
+XMFR_XFMR_DROPOUT_RATE = 0.1
+
+
+# LSTM_LSTM
+LSTM_LSTM_EMBEDDING_DIM = 512
+LSTM_LSTM_RNN_UNITS = 128
 
 
 class DnnType(enum.Enum):
@@ -64,40 +71,61 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
         f"Restore or init (run_id={run_id}, dnn={dnn_type}, tok={tokenizer_type})"
     )
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
-
-    transformer = transformer_m.Transformer(
-        num_layers=NUM_LAYERS,
-        d_model=D_MODEL,
-        num_heads=NUM_HEADS,
-        dff=DFF,
-        input_vocab_size=tok_x.vocab_size(),
-        target_vocab_size=tok_y.vocab_size(),
-        pe_input=X_MAX_LEN,
-        pe_target=Y_MAX_LEN,
-        rate=DROPOUT_RATE,
-    )
-
     base_path = SPECIFICATIONS["base_ckpt"]
-    ckpt_path = os.path.join(
-        base_path,
-        str(dnn_type),
-        str(tokenizer_type),
-        f"run_id={run_id}",
-        f"corpus_limit={CORPUS_LIMIT}",
-        f"num_layers={NUM_LAYERS}",
-        f"num_heads={NUM_HEADS}",
-        f"d_model={D_MODEL}",
-        f"dff={DFF}",
-        f"x_len={X_MAX_LEN}",
-        f"y_max_len={Y_MAX_LEN}",
-        f"dropout_rate={DROPOUT_RATE}",
-    )
+
+    if dnn_type == DnnType.XFMR_XFMR:
+        model = transformer_m.Transformer(
+            num_layers=XFMR_XFMR_NUM_LAYERS,
+            d_model=XFMR_XFMR_D_MODEL,
+            num_heads=XFMR_XFMR_NUM_HEADS,
+            dff=XFMR_XFMR_DFF,
+            input_vocab_size=tok_x.vocab_size(),
+            target_vocab_size=tok_y.vocab_size(),
+            pe_input=X_MAX_LEN,
+            pe_target=Y_MAX_LEN,
+            rate=XMFR_XFMR_DROPOUT_RATE,
+        )
+        ckpt_path = os.path.join(
+            base_path,
+            str(dnn_type),
+            str(tokenizer_type),
+            f"run_id={run_id}",
+            f"corpus_limit={CORPUS_LIMIT}",
+            f"num_layers={XFMR_XFMR_NUM_LAYERS}",
+            f"num_heads={XFMR_XFMR_NUM_HEADS}",
+            f"d_model={XFMR_XFMR_D_MODEL}",
+            f"dff={XFMR_XFMR_DFF}",
+            f"x_len={X_MAX_LEN}",
+            f"y_max_len={Y_MAX_LEN}",
+            f"dropout_rate={XMFR_XFMR_DROPOUT_RATE}",
+        )
+        optimizer = transformer_m.optimizer(XFMR_XFMR_D_MODEL)
+
+    elif dnn_type == DnnType.LSTM_LSTM:
+        model = bi_lstm_attn_m.Seq2SeqBiLstmAttn(
+            embedding_dim=LSTM_LSTM_EMBEDDING_DIM,
+            units=LSTM_LSTM_RNN_UNITS,
+            input_vocab_size=tok_x.vocab_size(),
+            target_vocab_size=tok_y.vocab_size(),
+        )
+        ckpt_path = os.path.join(
+            base_path,
+            str(dnn_type),
+            str(tokenizer_type),
+            f"run_id={run_id}",
+            f"corpus_limit={CORPUS_LIMIT}",
+            f"embedding_dim={LSTM_LSTM_EMBEDDING_DIM}",
+            f"units={LSTM_LSTM_RNN_UNITS}",
+            f"x_len={X_MAX_LEN}",
+            f"y_max_len={Y_MAX_LEN}",
+        )
+        optimizer = tf.optimizers.Adam()
+
     # Create the path if it doesn't exist
     pathlib.Path(ckpt_path).mkdir(parents=True, exist_ok=True)
     logging.info(f"Pipeline path (path={ckpt_path})")
 
-    optimizer = transformer_m.optimizer(D_MODEL)
-    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+    ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer)
 
     ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_path, max_to_keep=5)
     if restore:
@@ -110,7 +138,7 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
         logging.info(f"Restore disabled, model initialized (path={ckpt_path})")
 
     return (
-        transformer,
+        model,
         optimizer,
         ckpt_manager,
     )
@@ -326,15 +354,6 @@ def train_xfmr_xfmr(
         from_logits=True, reduction="none"
     )
 
-    def loss_function(real, pred):
-        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
-        loss_ = loss_object(real, pred)
-
-        mask = tf.cast(mask, dtype=loss_.dtype)
-        loss_ *= mask
-
-        return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
-
     def accuracy_function(real, pred):
         accuracies = tf.equal(real, tf.argmax(pred, axis=2))
 
@@ -371,7 +390,7 @@ def train_xfmr_xfmr(
 
         with tf.GradientTape() as tape:
             predictions, _ = transformer([inp, tar_inp], training=True)
-            loss = loss_function(tar_real, predictions)
+            loss = pad_loss_function(loss_object, tar_real, predictions)
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
         optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
@@ -379,21 +398,136 @@ def train_xfmr_xfmr(
         train_loss(loss)
         train_accuracy(accuracy_function(tar_real, predictions))
 
-    logging.info(f"Training (accuracy={ACCURACY_TH})")
+    main_train_loop(
+        train_batches,
+        train_loss,
+        train_accuracy,
+        train_step,
+        n_epochs=n_epochs,
+        ckpt_manager=ckpt_manager,
+    )
+
+
+def pad_loss_function(loss_object, real, pred):
+    mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
+    loss_ = loss_object(real, pred)
+
+    mask = tf.cast(mask, dtype=loss_.dtype)
+    loss_ *= mask
+
+    return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+
+
+def train_lstm_lstm(
+    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
+):
+    logging.info(
+        f"Training DNN (run_id={run_id}, dnn={DnnType.LSTM_LSTM},"
+        f"tok={tokenizer_type})"
+    )
+
+    train_batches = tokenize_and_batch(run_id, tokenizer_type, train_xy)
+
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+        from_logits=True, reduction="none"
+    )
+
+    def accuracy_function(real, pred):
+        accuracies = tf.equal(real, tf.argmax(pred, axis=2))
+
+        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
+        accuracies = tf.math.logical_and(mask, accuracies)
+
+        accuracies = tf.cast(accuracies, dtype=tf.float32)
+        mask = tf.cast(mask, dtype=tf.float32)
+        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
+
+    train_loss = tf.keras.metrics.Mean(name="train_loss")
+    train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
+
+    logging.info("Restoring dnn...")
+    model, optimizer, ckpt_manager = restore_or_init(
+        run_id, DnnType.LSTM_LSTM, tokenizer_type, restore=restore
+    )
+
+    # The @tf.function trace-compiles train_step into a TF graph for faster
+    # execution. The function specializes to the precise shape of the argument
+    # tensors. To avoid re-tracing due to the variable sequence lengths or variable
+    # batch sizes (the last batch is smaller), use input_signature to specify
+    # more generic shapes.
+
+    train_step_signature = [
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+    ]
+
+    @tf.function(input_signature=train_step_signature)
+    def train_step(inp, tar):
+        max_target_length = tf.shape(tar)[1]
+
+        enc_output = None
+        dec_states = None
+
+        loss = tf.constant(0.0)
+        with tf.GradientTape() as tape:
+            for t in tf.range(max_target_length - 1):
+                tar_inp = tar[:, t : t + 1]
+                tar_real = tar[:, t + 1 : t + 2]
+
+                predictions, _, enc_output, dec_states = model(
+                    [inp, tar_inp],
+                    training=True,
+                    enc_output=enc_output,
+                    dec_initial_states=dec_states,
+                )
+
+                step_loss = pad_loss_function(loss_object, tar_real, predictions)
+                loss = loss + step_loss
+
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+        train_loss(loss)
+        train_accuracy(accuracy_function(tar_real, predictions))
+
+    main_train_loop(
+        train_batches,
+        train_loss,
+        train_accuracy,
+        train_step,
+        n_epochs=n_epochs,
+        ckpt_manager=ckpt_manager,
+    )
+
+
+def main_train_loop(
+    train_batches,
+    train_loss,
+    train_accuracy,
+    fc_train_step,
+    n_epochs=None,
+    ckpt_manager=None,
+):
+    if n_epochs:
+        logging.info(f"Training for n_epochs(n_epochs={n_epochs})")
+    else:
+        logging.info(f"Training until threshold(accuracy_th={ACCURACY_TH})")
+
     epoch = 0
     while 1:
-        epoch += 1
         if n_epochs is None:
             if train_accuracy.result() >= ACCURACY_TH:
                 logging.info(
-                    f"Accuracy reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                    f"Accuracy reached: Epoch {epoch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
                 break
-        elif n_epochs == epoch - 1:
+        elif n_epochs == epoch:
             logging.info(
-                f"Epoch reached: Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                f"Epoch reached: Epoch {epoch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
             )
             break
+
+        epoch += 1
 
         start = time.time()
         train_loss.reset_states()
@@ -401,7 +535,7 @@ def train_xfmr_xfmr(
 
         # inp -> ehr, tar -> icd classification
         for (batch, (inp, tar)) in enumerate(train_batches):
-            train_step(inp, tar)
+            fc_train_step(inp, tar)
 
             if batch > 0 and batch % 50 == 0:
                 logging.info(
@@ -409,7 +543,7 @@ def train_xfmr_xfmr(
                 )
                 logging.info(f"Elapsed time: {time.time() - start:.2f} secs")
 
-        if save:
+        if ckpt_manager is not None:
             ckpt_save_path = ckpt_manager.save()
             logging.info(f"Saving checkpoint for epoch {epoch} at {ckpt_save_path}")
 
