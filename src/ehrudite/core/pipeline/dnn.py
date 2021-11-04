@@ -179,8 +179,6 @@ class Translator(tf.Module):
             if predicted_id == eos_token:
                 break
 
-        # import pdb
-        # pdb.set_trace()
         output = tf.transpose(output_array.stack())
         # output.shape(1, tokens)
         text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
@@ -463,14 +461,12 @@ def train_lstm_lstm(
 
     @tf.function(input_signature=train_step_signature)
     def train_step(inp, tar):
-        max_target_length = tf.shape(tar)[1]
-
         enc_output = None
         dec_states = None
 
         loss = tf.constant(0.0)
         with tf.GradientTape() as tape:
-            for t in tf.range(max_target_length - 1):
+            for t in range(Y_MAX_LEN - 1):
                 tar_inp = tar[:, t : t + 1]
                 tar_real = tar[:, t + 1 : t + 2]
 
