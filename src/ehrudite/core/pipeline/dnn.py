@@ -50,20 +50,25 @@ SPECIFICATIONS = {
 }
 
 
-def normalize(sequence, max_length, add_bos_eof=True):
-    if add_bos_eof:
-        sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
-        enclosed = tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
-        sequence = enclosed
+def sequence_enclose(sequence, max_length):
+    sliced = tf.slice(sequence, [0], [min(max_length - 2, sequence.shape[0])])
+    return tf.concat([[pip_tok.BOS_TOK], sliced, [pip_tok.EOS_TOK]], 0)
 
+
+def sequence_pad(sequence, max_length, padding="post", truncating="post"):
     padded = tf.keras.preprocessing.sequence.pad_sequences(
         [sequence],
         maxlen=max_length,
-        padding="post",
-        truncating="post",
+        padding=padding,
+        truncating=truncating,
         value=pip_tok.PAD_TOK,
     )[0]
     return tf.constant(padded)
+
+
+def sequence_pad_and_enclose(sequence, max_length, **kwargs):
+    sequence = sequence_enclose(sequence, max_length, **kwargs)
+    return sequence_pad(sequence, max_length, **kwargs)
 
 
 def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
@@ -154,7 +159,7 @@ class Translator(tf.Module):
     def __call__(self, sentence):
         # Input sentence is the EHR, hence preparing with BOS and EOS
         sequence = self.tok_x.tokenize(sentence)
-        encoder_input = normalize(sequence, X_MAX_LEN)[tf.newaxis]
+        encoder_input = sequence_pad_and_enclose(sequence, X_MAX_LEN)[tf.newaxis]
 
         bos_token = tf.constant(pip_tok.BOS_TOK, dtype=tf.int64)[tf.newaxis]
         eos_token = tf.constant(pip_tok.EOS_TOK, dtype=tf.int64)[tf.newaxis]
@@ -250,8 +255,8 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
         val_f1_score_micro(f1_score(y, pred_text, "micro"))
         val_f1_score_macro(f1_score(y, pred_text, "macro"))
 
-        pred_tokens = normalize(pred_tokens[0], Y_MAX_LEN, add_bos_eof=False)
-        real_tokens = normalize(tok_y.tokenize(y), Y_MAX_LEN, add_bos_eof=True)
+        pred_tokens = sequence_pad(pred_tokens[0], Y_MAX_LEN)
+        real_tokens = sequence_pad_and_enclose(tok_y.tokenize(y), Y_MAX_LEN)
         val_tok_accuracy(accuracy(real_tokens, pred_tokens))
 
         if i > 0 and i % 1 == 0:
@@ -287,55 +292,73 @@ def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
         train_lstm_lstm(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
 
 
-def tokenize_and_batch(run_id, tokenizer_type, train_xy):
+def prepare_xy_tokens(run_id, tokenizer_type, xy):
     logging.info(
-        "Building dataset (run_id={run_id}, tokenizer_type={tokenizer_type})..."
+        "{prepare_xy_tokens.__name} (run_id={run_id}, tokenizer_type={tokenizer_type})"
     )
-    train_x, train_y = pip.unpack_2d(train_xy)
+    x, y = pip.unpack_2d(xy)
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
     if CORPUS_LIMIT is not None and CORPUS_LIMIT != -1:
-        logging.info("Corpus limited (corpus_limit={CORPUS_LIMIT})")
+        logging.info("Corpus LIMITED (corpus_limit={CORPUS_LIMIT})")
         debug_x = []
         debug_y = []
-        for i, (x, y) in enumerate(zip(train_x, train_y)):
+        for i, (x, y) in enumerate(zip(x, y)):
             debug_x.append(x)
             debug_y.append(y)
             if i >= (CORPUS_LIMIT - 1):
                 break
-        train_x = debug_x
-        train_y = debug_y
+        x = debug_x
+        y = debug_y
 
-    def prepare_xy():
-        train_x_tok = (tok_x.tokenize(x) for x in train_x)
-        train_y_tok = (tok_y.tokenize(y) for y in train_y)
-
-        return (
-            (normalize(x, X_MAX_LEN), normalize(y, Y_MAX_LEN))
-            for x, y in zip(train_x_tok, train_y_tok)
-        )
-
-    logging.info("Preparing x and y...")
-    train_xy_tok_gen = er_text.LenghtableRepeatableGenerator(
-        prepare_xy, _length=len(train_xy)
+    return er_text.LenghtableRepeatableGenerator(
+        lambda: ((tok_x.tokenize(x1), tok_y.tokenize(y1)) for x1, y1 in zip(x, y)),
+        _length=len(xy),
     )
 
-    logging.info("Creating dataset...")
-    train_xy_tok_ds = tf.data.Dataset.from_generator(
-        train_xy_tok_gen,
+
+def normalize_xy_tokens(xy_tokens, **kwargs):
+    logging.info(
+        "{normalize_xy_tokens.__name} (run_id={run_id}, tokenizer_type={tokenizer_type})"
+    )
+    return (
+        (sequence_pad(x, X_MAX_LEN, **kwargs), sequence_pad(y, Y_MAX_LEN, **kwargs))
+        for x, y in xy_tokens
+    )
+
+
+def sequence_enclose_xy_tokens(xy_tokens):
+    logging.info("{sequence_enclose_xy_tokens.__name}")
+    return (
+        (sequence_enclose(x, X_MAX_LEN), sequence_enclose(y, Y_MAX_LEN))
+        for x, y in xy_tokens
+    )
+
+
+def batch_xy_tokens(generator):
+    logging.info("Making batch...")
+    dataset = tf.data.Dataset.from_generator(
+        lambda: generator,
         output_signature=(
             tf.TensorSpec(shape=(None,), dtype=tf.int64),
             tf.TensorSpec(shape=(None,), dtype=tf.int64),
         ),
     )
+    return (
+        dataset.cache()
+        .shuffle(BUFFER_SIZE)
+        .batch(BATCH_SIZE)
+        .prefetch(tf.data.AUTOTUNE)
+    )
 
-    def make_batches(ds):
-        return (
-            ds.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-        )
 
-    return make_batches(train_xy_tok_ds)
+def make_xy_tokens_combinations(xy_tokens):
+    return (
+        (x_tokens, y_tokens[: i + 1])
+        for x_tokens, y_tokens in xy_tokens
+        for i in range(1, len(y_tokens))
+    )
 
 
 def train_xfmr_xfmr(
@@ -346,7 +369,10 @@ def train_xfmr_xfmr(
         f"tok={tokenizer_type})"
     )
 
-    train_batches = tokenize_and_batch(run_id, tokenizer_type, train_xy)
+    train_xy_tokens = prepare_xy_tokens(run_id, tokenizer_type, train_xy)
+    train_xy_tokens = sequence_enclose_xy_tokens(train_xy_tokens)
+    train_xy_norms = normalize_xy_tokens(train_xy_tokens)
+    train_batches = batch_xy_tokens(train_xy_norms)
 
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
@@ -375,7 +401,6 @@ def train_xfmr_xfmr(
     # tensors. To avoid re-tracing due to the variable sequence lengths or variable
     # batch sizes (the last batch is smaller), use input_signature to specify
     # more generic shapes.
-
     train_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
@@ -424,7 +449,11 @@ def train_lstm_lstm(
         f"tok={tokenizer_type})"
     )
 
-    train_batches = tokenize_and_batch(run_id, tokenizer_type, train_xy)
+    train_xy_tokens = prepare_xy_tokens(run_id, tokenizer_type, train_xy)
+    train_xy_tokens = sequence_enclose_xy_tokens(train_xy_tokens)
+    train_xy_combs = make_xy_tokens_combinations(train_xy_tokens)
+    train_xy_norms = normalize_xy_tokens(train_xy_combs, padding="pre")
+    train_batches = batch_xy_tokens(train_xy_norms)
 
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction="none"
@@ -461,24 +490,12 @@ def train_lstm_lstm(
 
     @tf.function(input_signature=train_step_signature)
     def train_step(inp, tar):
-        enc_output = None
-        dec_states = None
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
 
-        loss = tf.constant(0.0)
         with tf.GradientTape() as tape:
-            for t in range(Y_MAX_LEN - 1):
-                tar_inp = tar[:, t : t + 1]
-                tar_real = tar[:, t + 1 : t + 2]
-
-                predictions, _, enc_output, dec_states = model(
-                    [inp, tar_inp],
-                    training=True,
-                    enc_output=enc_output,
-                    dec_initial_states=dec_states,
-                )
-
-                step_loss = pad_loss_function(loss_object, tar_real, predictions)
-                loss = loss + step_loss
+            predictions, _, _, _ = model([inp, tar_inp], training=True)
+            loss = pad_loss_function(loss_object, tar_real, predictions)
 
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -530,12 +547,15 @@ def main_train_loop(
         train_accuracy.reset_states()
 
         # inp -> ehr, tar -> icd classification
-        for (batch, (inp, tar)) in enumerate(train_batches):
+        for batch_id, (
+            inp,
+            tar,
+        ) in enumerate(train_batches):
             fc_train_step(inp, tar)
 
-            if batch > 0 and batch % 50 == 0:
+            if batch_id > 0 and batch_id % 1 == 0:
                 logging.info(
-                    f"Epoch {epoch} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
+                    f"Epoch {epoch} Batch {batch_id} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}"
                 )
                 logging.info(f"Elapsed time: {time.time() - start:.2f} secs")
 

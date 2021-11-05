@@ -92,7 +92,7 @@ def cli():
         # Run for each tokenizer
         for tokenizer_type in TOKENIZER_ALLOW_LIST:
 
-            def run_dnn_pipeline(dnn_type, n_epochs=[0, 0, 0, 71]):
+            def run_dnn_pipeline(dnn_type, n_epochs=[0, 0, 0, 265]):
                 if args.test:
                     pip_dnn.validate(
                         run_id,

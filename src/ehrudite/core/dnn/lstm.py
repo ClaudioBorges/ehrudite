@@ -27,10 +27,13 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         self.shape_checker(inp, ("batch", "s"))
         self.shape_checker(tar, ("batch", "t"))
 
-        input_mask, target_mask = self.create_masks(inp, tar)
+        input_mask = self.padding_mask(inp)
+        target_mask = self.padding_mask(tar)
 
         if enc_output is None:
-            enc_output, enc_states = self.encoder(inp, training)
+            enc_output, enc_states = self.encoder(
+                inp, training, padding_mask=input_mask
+            )
             self.shape_checker(enc_output, ("batch", "s", "enc_units"))
             self.shape_checker(enc_states[0], ("batch", "enc_units"))
             self.shape_checker(enc_states[1], ("batch", "enc_units"))
@@ -40,8 +43,8 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
         dec_attn_vector, dec_attn_weights, dec_states = self.decoder(
             tar,
             enc_output,
-            input_mask,
-            target_mask,
+            enc_padding_mask=input_mask,
+            dec_padding_mask=target_mask,
             initial_state=dec_initial_states,
         )
         self.shape_checker(dec_attn_vector, ("batch", "t", "dec_units"))
@@ -54,40 +57,18 @@ class Seq2SeqBiLstmAttn(tf.keras.Model):
 
         return logits, dec_attn_weights, enc_output, dec_states
 
-    def create_masks(self, inp, tar):
-        self.shape_checker(inp, ("batch", "s"))
-        self.shape_checker(tar, ("batch", "t"))
-
-        # Convert IDs to masks.
-        input_mask = inp != pip_tok.PAD_TOK
-        self.shape_checker(input_mask, ("batch", "s"))
-
-        target_mask = tar != pip_tok.PAD_TOK
-        self.shape_checker(target_mask, ("batch", "t"))
-
-        return input_mask, target_mask
-
-    def _create_masks(self, inp, tar):
-        # Encoder padding mask
-        enc_padding_mask = _create_padding_mask(inp)
-
-        # Used in the 2nd attention block in the decoder
-        # This padding mask is used to mask the encoder outputs.
-        dec_padding_mask = _create_padding_mask(inp)
-
-        # Used in the 1st attention block in the decoder.
-        # It is used to pad and mask future tokens in the input received by
-        # the decoder.
-        look_ahead_mask = _create_look_ahead_mask(tf.shape(tar)[1])
-        dec_target_padding_mask = _create_padding_mask(tar)
-        look_ahead_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-        return enc_padding_mask, look_ahead_mask, dec_padding_mask
+    def padding_mask(self, sequence):
+        self.shape_checker(sequence, ("batch", "n"))
+        masked = sequence != pip_tok.PAD_TOK
+        self.shape_checker(masked, ("batch", "n"))
+        return masked
 
 
 class Encoder(tf.keras.layers.Layer):
     def __init__(self, input_vocab_size, embedding_dim, enc_units):
         super(Encoder, self).__init__()
 
+        self.shape_checker = er_helper.ShapeChecker()
         self.enc_units = enc_units
         assert enc_units % 2 == 0, "Hidden state must be divisable by 2"
 
@@ -101,7 +82,7 @@ class Encoder(tf.keras.layers.Layer):
             )
         )
 
-    def call(self, x, training, initial_state=None):
+    def call(self, x, training, padding_mask=None, initial_state=None):
         shape_checker = er_helper.ShapeChecker()
         shape_checker(x, ("batch", "s"))
 
@@ -111,7 +92,7 @@ class Encoder(tf.keras.layers.Layer):
 
         # 3. The RNN processes the embedding sequence.
         output, forward_h, forward_c, backward_h, backward_c = self.bi_lstm(
-            vectors, training=training, initial_state=initial_state
+            vectors, training=training, mask=padding_mask, initial_state=initial_state
         )
         state_h = tf.keras.layers.Concatenate()([forward_h, backward_h])
         state_c = tf.keras.layers.Concatenate()([forward_c, backward_c])
@@ -127,6 +108,8 @@ class Encoder(tf.keras.layers.Layer):
 class Decoder(tf.keras.layers.Layer):
     def __init__(self, output_vocab_size, embedding_dim, dec_units):
         super(Decoder, self).__init__()
+
+        self.shape_checker = er_helper.ShapeChecker()
         self.dec_units = dec_units
         self.output_vocab_size = output_vocab_size
         self.embedding_dim = embedding_dim
@@ -155,40 +138,39 @@ class Decoder(tf.keras.layers.Layer):
         self,
         x,
         enc_output,
-        enc_padding_mask,
+        enc_padding_mask=None,
         dec_padding_mask=None,
-        look_ahead_mask=None,
         initial_state=None,
     ):
-        shape_checker = er_helper.ShapeChecker()
-        shape_checker(x, ("batch", "t"))
-        shape_checker(enc_output, ("batch", "s", "enc_units"))
-        shape_checker(enc_padding_mask, ("batch", "s"))
+        self.shape_checker = er_helper.ShapeChecker()
+        self.shape_checker(x, ("batch", "t"))
+        self.shape_checker(enc_output, ("batch", "s", "enc_units"))
+        self.shape_checker(enc_padding_mask, ("batch", "s"))
 
         if initial_state is not None:
-            shape_checker(initial_state[0], ("batch", "dec_units"))
-            shape_checker(initial_state[1], ("batch", "dec_units"))
+            self.shape_checker(initial_state[0], ("batch", "dec_units"))
+            self.shape_checker(initial_state[1], ("batch", "dec_units"))
 
         # Step 1. Lookup the embeddings
         vectors = self.embedding(x)
-        shape_checker(vectors, ("batch", "t", "embedding_dim"))
+        self.shape_checker(vectors, ("batch", "t", "embedding_dim"))
 
         # Step 2. Process one step with the RNN
         rnn_output, state_h, state_c = self.lstm(
             vectors, mask=dec_padding_mask, initial_state=initial_state
         )
 
-        shape_checker(rnn_output, ("batch", "t", "dec_units"))
-        shape_checker(state_h, ("batch", "dec_units"))
-        shape_checker(state_c, ("batch", "dec_units"))
+        self.shape_checker(rnn_output, ("batch", "t", "dec_units"))
+        self.shape_checker(state_h, ("batch", "dec_units"))
+        self.shape_checker(state_c, ("batch", "dec_units"))
 
         # Step 3. Use the RNN output as the query for the attention over the
         # encoder output.
         context_vector, attn_weights = self.attention(
             query=rnn_output, value=enc_output, mask=enc_padding_mask
         )
-        shape_checker(context_vector, ("batch", "t", "dec_units"))
-        shape_checker(attn_weights, ("batch", "t", "s"))
+        self.shape_checker(context_vector, ("batch", "t", "dec_units"))
+        self.shape_checker(attn_weights, ("batch", "t", "s"))
 
         # Step 4. Eqn. (3): Join the context_vector and rnn_output
         #     [ct; ht] shape: (batch t, value_units + query_units)
@@ -196,7 +178,7 @@ class Decoder(tf.keras.layers.Layer):
 
         # Step 4. Eqn. (3): `at = tanh(Wc@[ct; ht])`
         attn_vector = self.Wc(context_and_rnn_output)
-        shape_checker(attn_vector, ("batch", "t", "dec_units"))
+        self.shape_checker(attn_vector, ("batch", "t", "dec_units"))
 
         return attn_vector, attn_weights, (state_h, state_c)
 
@@ -211,18 +193,18 @@ class BahdanauAttention(tf.keras.layers.Layer):
         self.attention = tf.keras.layers.AdditiveAttention()
 
     def call(self, query, value, mask):
-        shape_checker = er_helper.ShapeChecker()
-        shape_checker(query, ("batch", "t", "query_units"))
-        shape_checker(value, ("batch", "s", "value_units"))
-        shape_checker(mask, ("batch", "s"))
+        self.shape_checker = er_helper.ShapeChecker()
+        self.shape_checker(query, ("batch", "t", "query_units"))
+        self.shape_checker(value, ("batch", "s", "value_units"))
+        self.shape_checker(mask, ("batch", "s"))
 
         # From Eqn. (4), `W1@ht`.
         w1_query = self.W1(query)
-        shape_checker(w1_query, ("batch", "t", "attn_units"))
+        self.shape_checker(w1_query, ("batch", "t", "attn_units"))
 
         # From Eqn. (4), `W2@hs`.
         w2_key = self.W2(value)
-        shape_checker(w2_key, ("batch", "s", "attn_units"))
+        self.shape_checker(w2_key, ("batch", "s", "attn_units"))
 
         query_mask = tf.ones(tf.shape(query)[:-1], dtype=bool)
         value_mask = mask
@@ -232,31 +214,7 @@ class BahdanauAttention(tf.keras.layers.Layer):
             mask=[query_mask, value_mask],
             return_attention_scores=True,
         )
-        shape_checker(context_vector, ("batch", "t", "value_units"))
-        shape_checker(attn_weights, ("batch", "t", "s"))
+        self.shape_checker(context_vector, ("batch", "t", "value_units"))
+        self.shape_checker(attn_weights, ("batch", "t", "s"))
 
         return context_vector, attn_weights
-
-
-def optimizer(d_model):
-    """Adam optimizer as of Section 5.3"""
-
-    class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-        def __init__(self, d_model, warmup_steps=4000):
-            super(CustomSchedule, self).__init__()
-
-            self.d_model = d_model
-            self.d_model = tf.cast(self.d_model, tf.float32)
-
-            self.warmup_steps = warmup_steps
-
-        def __call__(self, step):
-            arg1 = tf.math.rsqrt(step)
-            arg2 = step * (self.warmup_steps ** -1.5)
-
-            return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-
-    learning_rate = CustomSchedule(d_model)
-    return tf.keras.optimizers.Adam(
-        learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9
-    )
