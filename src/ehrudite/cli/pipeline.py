@@ -14,8 +14,8 @@ N_SPLITS = 4
 
 
 TOKENIZER_ALLOW_LIST = [
-    pip_tok.TokenizerType.SENTENCEPIECE,
-    # pip_tok.TokenizerType.WORDPIECE,
+    # pip_tok.TokenizerType.SENTENCEPIECE,
+    pip_tok.TokenizerType.WORDPIECE,
 ]
 
 
@@ -63,6 +63,12 @@ def make_parser():
         help=f'ehr-data base path (default="{EHR_DATA}")',
     )
     parser.add_argument(
+        "-i",
+        "--ignore_checkpoint",
+        action="store_true",
+        help=f"ignore model checkpoint",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="count",
@@ -92,7 +98,7 @@ def cli():
         # Run for each tokenizer
         for tokenizer_type in TOKENIZER_ALLOW_LIST:
 
-            def run_dnn_pipeline(dnn_type, n_epochs=[0, 0, 0, 265]):
+            def run_dnn_pipeline(dnn_type, n_epochs=[265, 265, 265, 265]):
                 if args.test:
                     pip_dnn.validate(
                         run_id,
@@ -107,8 +113,8 @@ def cli():
                         dnn_type,
                         tokenizer_type,
                         train_xy,
-                        test_xy,
                         n_epochs=n_epochs[run_id],
+                        use_checkpoint=not args.ignore_checkpoint,
                     )
 
             # Tokenizer

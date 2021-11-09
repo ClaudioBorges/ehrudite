@@ -33,10 +33,18 @@ class WordpieceTokenizer(tf_text.WordpieceTokenizer):
 
     def detokenize(self, tokens):
         word_tokens = tf.reshape(tokens, [1, -1])
-        sequences = super(WordpieceTokenizer, self).detokenize(word_tokens)
+        unstacked = tf.unstack(word_tokens[0])
+        # Filter out <s> and </s>
+        filtered = [i for i in unstacked if i not in (1, 2)]
+        if len(filtered) == 0:
+            return tf.constant([""])
+
+        filtered_tokens = tf.expand_dims(tf.stack(filtered, 0), 0)
+        sequences = super(WordpieceTokenizer, self).detokenize(filtered_tokens)
         words = sequences.merge_dims(0, -1)
         sentence = tf.strings.reduce_join(words, axis=0, separator=" ")
-        return sentence
+        sentences = tf.expand_dims(sentence, -1)
+        return sentences
 
     def vocab_size(self):
         # Tensorflow text 2.6.0 does not have a vocab_size method

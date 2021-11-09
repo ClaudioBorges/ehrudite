@@ -185,7 +185,6 @@ class Translator(tf.Module):
                 break
 
         output = tf.transpose(output_array.stack())
-        # output.shape(1, tokens)
         text = self.tok_y.detokenize(tf.cast(output, dtype=tf.int32))[0]  # shape: ()
 
         tokens = output  # self.tok_y.lookup(tf.cast(output, dtype=tf.int32))[0]
@@ -247,7 +246,6 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
 
     start = time.time()
     for (i, (x, y)) in enumerate(test_xy):
-        # for (i, (x, y)) in enumerate(train_xy):
         pred_text, pred_tokens, attention_weights = translator(x)
 
         pred_text = pred_text.numpy().decode()
@@ -285,23 +283,29 @@ def validate(run_id, dnn_type, tokenizer_type, train_xy, test_xy):
     )
 
 
-def train(run_id, dnn_type, tokenizer_type, train_xy, test_xy, **kwargs):
+def train(run_id, dnn_type, tokenizer_type, train_xy, use_checkpoint=True, **kwargs):
+    # All models have an process, optimizer, a checkpoint manager and tokens
+    xy_tokens = prepare_xy_tokens(run_id, tokenizer_type, train_xy)
+    model, optimizer, ckpt_manager = restore_or_init(
+        run_id, dnn_type, tokenizer_type, restore=use_checkpoint
+    )
+
     if dnn_type == DnnType.XFMR_XFMR:
-        train_xfmr_xfmr(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
+        train_xfmr_xfmr(run_id, model, optimizer, ckpt_manager, xy_tokens, **kwargs)
     elif dnn_type == DnnType.LSTM_LSTM:
-        train_lstm_lstm(run_id, tokenizer_type, train_xy, test_xy, **kwargs)
+        train_lstm_lstm(run_id, model, optimizer, ckpt_manager, xy_tokens, **kwargs)
 
 
 def prepare_xy_tokens(run_id, tokenizer_type, xy):
     logging.info(
-        "{prepare_xy_tokens.__name} (run_id={run_id}, tokenizer_type={tokenizer_type})"
+        "{prepare_xy_tokens.__name__} (run_id={run_id}, tokenizer_type={tokenizer_type})"
     )
     x, y = pip.unpack_2d(xy)
     tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
 
     # DEBUG - Fixed elements
     if CORPUS_LIMIT is not None and CORPUS_LIMIT != -1:
-        logging.info("Corpus LIMITED (corpus_limit={CORPUS_LIMIT})")
+        logging.info(f"Corpus LIMITED (corpus_limit={CORPUS_LIMIT})")
         debug_x = []
         debug_y = []
         for i, (x, y) in enumerate(zip(x, y)):
@@ -319,9 +323,7 @@ def prepare_xy_tokens(run_id, tokenizer_type, xy):
 
 
 def normalize_xy_tokens(xy_tokens, **kwargs):
-    logging.info(
-        "{normalize_xy_tokens.__name} (run_id={run_id}, tokenizer_type={tokenizer_type})"
-    )
+    logging.info(f"{normalize_xy_tokens.__name__}")
     return (
         (sequence_pad(x, X_MAX_LEN, **kwargs), sequence_pad(y, Y_MAX_LEN, **kwargs))
         for x, y in xy_tokens
@@ -329,7 +331,7 @@ def normalize_xy_tokens(xy_tokens, **kwargs):
 
 
 def sequence_enclose_xy_tokens(xy_tokens):
-    logging.info("{sequence_enclose_xy_tokens.__name}")
+    logging.info(f"{sequence_enclose_xy_tokens.__name__}")
     return (
         (sequence_enclose(x, X_MAX_LEN), sequence_enclose(y, Y_MAX_LEN))
         for x, y in xy_tokens
@@ -361,16 +363,12 @@ def make_xy_tokens_combinations(xy_tokens):
     )
 
 
-def train_xfmr_xfmr(
-    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
-):
+def train_xfmr_xfmr(run_id, model, optimizer, ckpt_manager, xy_tokens, n_epochs=None):
     logging.info(
-        f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR},"
-        f"tok={tokenizer_type})"
+        f"Training DNN (run_id={run_id}, dnn={DnnType.XFMR_XFMR}, n_epochs={n_epochs}"
     )
 
-    train_xy_tokens = prepare_xy_tokens(run_id, tokenizer_type, train_xy)
-    train_xy_tokens = sequence_enclose_xy_tokens(train_xy_tokens)
+    train_xy_tokens = sequence_enclose_xy_tokens(xy_tokens)
     train_xy_norms = normalize_xy_tokens(train_xy_tokens)
     train_batches = batch_xy_tokens(train_xy_norms)
 
@@ -378,23 +376,8 @@ def train_xfmr_xfmr(
         from_logits=True, reduction="none"
     )
 
-    def accuracy_function(real, pred):
-        accuracies = tf.equal(real, tf.argmax(pred, axis=2))
-
-        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
-        accuracies = tf.math.logical_and(mask, accuracies)
-
-        accuracies = tf.cast(accuracies, dtype=tf.float32)
-        mask = tf.cast(mask, dtype=tf.float32)
-        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
-
     train_loss = tf.keras.metrics.Mean(name="train_loss")
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
-
-    logging.info("Restoring dnn...")
-    transformer, optimizer, ckpt_manager = restore_or_init(
-        run_id, DnnType.XFMR_XFMR, tokenizer_type, restore=restore
-    )
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
     # execution. The function specializes to the precise shape of the argument
@@ -413,7 +396,7 @@ def train_xfmr_xfmr(
 
         with tf.GradientTape() as tape:
             predictions, _ = transformer([inp, tar_inp], training=True)
-            loss = pad_loss_function(loss_object, tar_real, predictions)
+            loss = loss_function(loss_object, tar_real, predictions)
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
         optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
@@ -431,7 +414,7 @@ def train_xfmr_xfmr(
     )
 
 
-def pad_loss_function(loss_object, real, pred):
+def loss_function(loss_object, real, pred):
     mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
     loss_ = loss_object(real, pred)
 
@@ -441,16 +424,23 @@ def pad_loss_function(loss_object, real, pred):
     return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
 
 
-def train_lstm_lstm(
-    run_id, tokenizer_type, train_xy, test_xy, restore=True, save=True, n_epochs=None
-):
+def accuracy_function(real, pred):
+    accuracies = tf.equal(real, tf.argmax(pred, axis=2))
+
+    mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
+    accuracies = tf.math.logical_and(mask, accuracies)
+
+    accuracies = tf.cast(accuracies, dtype=tf.float32)
+    mask = tf.cast(mask, dtype=tf.float32)
+    return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
+
+
+def train_lstm_lstm(run_id, model, optimizer, ckpt_manager, xy_tokens, n_epochs=None):
     logging.info(
-        f"Training DNN (run_id={run_id}, dnn={DnnType.LSTM_LSTM},"
-        f"tok={tokenizer_type})"
+        f"Training DNN (run_id={run_id}, dnn={DnnType.LSTM_LSTM}, n_epochs={n_epochs})"
     )
 
-    train_xy_tokens = prepare_xy_tokens(run_id, tokenizer_type, train_xy)
-    train_xy_tokens = sequence_enclose_xy_tokens(train_xy_tokens)
+    train_xy_tokens = sequence_enclose_xy_tokens(xy_tokens)
     train_xy_combs = make_xy_tokens_combinations(train_xy_tokens)
     train_xy_norms = normalize_xy_tokens(train_xy_combs, padding="pre")
     train_batches = batch_xy_tokens(train_xy_norms)
@@ -459,30 +449,14 @@ def train_lstm_lstm(
         from_logits=True, reduction="none"
     )
 
-    def accuracy_function(real, pred):
-        accuracies = tf.equal(real, tf.argmax(pred, axis=2))
-
-        mask = tf.math.logical_not(tf.math.equal(real, pip_tok.PAD_TOK))
-        accuracies = tf.math.logical_and(mask, accuracies)
-
-        accuracies = tf.cast(accuracies, dtype=tf.float32)
-        mask = tf.cast(mask, dtype=tf.float32)
-        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
-
     train_loss = tf.keras.metrics.Mean(name="train_loss")
     train_accuracy = tf.keras.metrics.Mean(name="train_accuracy")
-
-    logging.info("Restoring dnn...")
-    model, optimizer, ckpt_manager = restore_or_init(
-        run_id, DnnType.LSTM_LSTM, tokenizer_type, restore=restore
-    )
 
     # The @tf.function trace-compiles train_step into a TF graph for faster
     # execution. The function specializes to the precise shape of the argument
     # tensors. To avoid re-tracing due to the variable sequence lengths or variable
     # batch sizes (the last batch is smaller), use input_signature to specify
     # more generic shapes.
-
     train_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
@@ -495,7 +469,7 @@ def train_lstm_lstm(
 
         with tf.GradientTape() as tape:
             predictions, _, _, _ = model([inp, tar_inp], training=True)
-            loss = pad_loss_function(loss_object, tar_real, predictions)
+            loss = loss_function(loss_object, tar_real, predictions)
 
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
