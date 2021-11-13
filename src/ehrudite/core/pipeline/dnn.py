@@ -150,11 +150,11 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
 
 
 class Translator(tf.Module):
-    def __init__(self, run_id, dnn_type, tokenizer_type, transformer=None):
+    def __init__(self, run_id, dnn_type, tokenizer_type, model=None):
         self.tok_x, self.tok_y = pip_tok.restore(run_id, tokenizer_type)
-        self.transformer = transformer
-        if self.transformer is None:
-            self.transformer, _, _ = restore_or_init(run_id, dnn_type, tokenizer_type)
+        self.model = model
+        if self.model is None:
+            self.model, _, _ = restore_or_init(run_id, dnn_type, tokenizer_type)
 
     def __call__(self, sentence):
         # Input sentence is the EHR, hence preparing with BOS and EOS
@@ -171,7 +171,7 @@ class Translator(tf.Module):
 
         for i in tf.range(Y_MAX_LEN - 1):
             output = tf.transpose(output_array.stack())
-            predictions, _ = self.transformer([encoder_input, output], training=False)
+            predictions = self.model([encoder_input, output], training=False)[0]
 
             # select the last token from the seq_len dimension
             predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)
@@ -192,9 +192,9 @@ class Translator(tf.Module):
         # `tf.function` prevents us from using the attention_weights that were
         # calculated on the last iteration of the loop. So recalculate them outside
         # the loop.
-        _, attention_weights = self.transformer(
-            [encoder_input, output[:, :-1]], training=False
-        )
+        attention_weights = self.model([encoder_input, output[:, :-1]], training=False)[
+            1
+        ]
 
         return text, tokens, attention_weights
 

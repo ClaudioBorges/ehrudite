@@ -14,8 +14,8 @@ N_SPLITS = 4
 
 
 TOKENIZER_ALLOW_LIST = [
-    # pip_tok.TokenizerType.SENTENCEPIECE,
-    pip_tok.TokenizerType.WORDPIECE,
+    pip_tok.TokenizerType.SENTENCEPIECE,
+    # pip_tok.TokenizerType.WORDPIECE,
 ]
 
 
