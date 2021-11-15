@@ -5,6 +5,7 @@ from collections import Counter
 from tqdm import tqdm
 import ehrpreper
 import ehrudite.core.pipeline as pip
+import ehrudite.core.pipeline.tokenizer as pip_tok
 import ehrudite.core.text as er_text
 import ehrudite.core.tokenizer.sentencepiece as sentencepiece
 import ehrudite.core.tokenizer.wordpiece as wordpiece
@@ -35,115 +36,91 @@ def _load_contents_from_ehrpreper(ehrpreper_file_name):
 
 
 def _from_tokenizer_ehpreper(
-    ehrpreper_file_name, tokenizer, tokenize_and_get_num_tokens, output_path
+    sequences,
+    output_path,
 ):
-    tokenizer_name = tokenizer.__class__.__name__
+    logging.info(f"Iterating over sequences (n_sequences={len(sequences)})...")
+    n_tokens_per_sequence = [sequence.shape[0] for sequence in tqdm(sequences)]
+
     logging.info(
-        f"Generating tokenizer statistic (file_name={ehrpreper_file_name}, name={tokenizer_name})..."
+        f"Statistics"
+        f"\n\ttokens_per_sequence"
+        f"\n\t\tmean={np.mean(n_tokens_per_sequence)}"
+        f"\n\t\tstd={np.std(n_tokens_per_sequence)}"
+        f"\n\t\tmax={np.max(n_tokens_per_sequence)}"
+        f"\n\t\tmin={np.min(n_tokens_per_sequence)}"
+        f"\n\t\thistogram={np.histogram(n_tokens_per_sequence, density=True)}"
+        f"\n\t\ttotal={len(n_tokens_per_sequence)}"
+    )
+    return n_tokens_per_sequence
+
+
+def from_tokenizer_ehrpreper(ehrpreper_file, tokenizer_type, output_path):
+    logging.info(f"Generating tokenizer statistic (name={tokenizer_type})...")
+
+    n_tokens_per_sequence_x = []
+    n_tokens_per_sequence_y = []
+
+    k_folded = pip.ehrpreper_k_fold_gen(ehrpreper_file)
+    for run_id, (
+        train_xy,
+        test_xy,
+    ) in enumerate(k_folded):
+        tok_x, tok_y = pip_tok.restore(run_id, tokenizer_type)
+        train_x, train_y = pip.unpack_2d(train_xy)
+        test_x, test_y = pip.unpack_2d(test_xy)
+
+        logging.info(f"Contents...")
+        x_sequences = er_text.LenghtableRepeatableGenerator(
+            lambda: (tok_x.tokenize(x) for xs in [train_x, test_x] for x in xs),
+            _length=len(train_x) + len(test_x),
+        )
+        # n_tokens_per_sequence_x += _from_tokenizer_ehpreper(
+        #    x_sequences, os.path.join(output_path, str(tokenizer_type), "contents")
+        # )
+
+        logging.info(f"Annotations...")
+        y_sequences = er_text.LenghtableRepeatableGenerator(
+            lambda: (tok_y.tokenize(y) for ys in [train_y, test_y] for y in ys),
+            _length=len(train_y) + len(test_y),
+        )
+        # n_tokens_per_sequence_y += _from_tokenizer_ehpreper(
+        #    y_sequences, os.path.join(output_path, str(tokenizer_type), "annotations")
+        # )
+
+    logging.info(
+        f"Contents statistic for {tokenizer_type}"
+        f"\n\ttokens_per_sequence"
+        f"\n\t\tmean={np.mean(n_tokens_per_sequence_x)}"
+        f"\n\t\tstd={np.std(n_tokens_per_sequence_x)}"
+        f"\n\t\tmax={np.max(n_tokens_per_sequence_x)}"
+        f"\n\t\tmin={np.min(n_tokens_per_sequence_x)}"
+        f"\n\t\thistogram={np.histogram(n_tokens_per_sequence_x, density=True)}"
+        f"\n\t\ttotal={len(n_tokens_per_sequence_x)}"
+        f"Annotations statistic for {tokenizer_type}"
+        f"\n\ttokens_per_sequence"
+        f"\n\t\tmean={np.mean(n_tokens_per_sequence_y)}"
+        f"\n\t\tstd={np.std(n_tokens_per_sequence_y)}"
+        f"\n\t\tmax={np.max(n_tokens_per_sequence_y)}"
+        f"\n\t\tmin={np.min(n_tokens_per_sequence_y)}"
+        f"\n\t\thistogram={np.histogram(n_tokens_per_sequence_y, density=True)}"
+        f"\n\t\ttotal={len(n_tokens_per_sequence_y)}"
     )
 
-    n_contents = sum([1 for i in _load_contents_from_ehrpreper(ehrpreper_file_name)])
-
-    n_sentences_per_content = []
-    n_tokens_per_sentence = []
-    n_tokens_per_content = []
-
-    logging.info(f"Iterating over contents (n_contents={n_contents})...")
-    for model in tqdm(iterable=ehrpreper.load(ehrpreper_file_name), total=n_contents):
-        for document in model.documents:
-            content = document.content
-            n_sentences = 0
-            n_tokens_acc = 0
-            for sentence in er_text.preprocess([content]):
-                n_sentences += 1
-                n_tokens = tokenize_and_get_num_tokens(tokenizer, sentence)
-                n_tokens_acc += n_tokens
-                n_tokens_per_sentence.append(n_tokens)
-            n_sentences_per_content.append(n_sentences)
-            n_tokens_per_content.append(n_tokens_acc)
-    logging.info(
-        f"{tokenizer_name} statistics"
-        f"\n\tsentences_per_contens"
-        f"\n\t\tmean={np.mean(n_sentences_per_content)}"
-        f"\n\t\tstd={np.std(n_sentences_per_content)}"
-        f"\n\t\tmax={np.max(n_sentences_per_content)}"
-        f"\n\t\tmin={np.min(n_sentences_per_content)}"
-        f"\n\t\thistogram={np.histogram(n_sentences_per_content, density=True)}"
-        f"\n\t\ttotal={len(n_sentences_per_content)}"
-        f"\n\ttokens_per_content"
-        f"\n\t\tmean={np.mean(n_tokens_per_content)}"
-        f"\n\t\tstd={np.std(n_tokens_per_content)}"
-        f"\n\t\tmax={np.max(n_tokens_per_content)}"
-        f"\n\t\tmin={np.min(n_tokens_per_content)}"
-        f"\n\t\thistogram={np.histogram(n_tokens_per_content, density=True)}"
-        f"\n\t\ttotal={len(n_tokens_per_content)}"
-        f"\n\ttokens_per_sentence"
-        f"\n\t\tmean={np.mean(n_tokens_per_sentence)}"
-        f"\n\t\tstd={np.std(n_tokens_per_sentence)}"
-        f"\n\t\tmax={np.max(n_tokens_per_sentence)}"
-        f"\n\t\tmin={np.min(n_tokens_per_sentence)}"
-        f"\n\t\thistogram={np.histogram(n_tokens_per_sentence, density=True)}"
-        f"\n\t\ttotal={len(n_tokens_per_sentence)}"
-    )
-    plt.figure(f"{tokenizer_name} Sentences' number per content")
-    _ = plt.hist(n_sentences_per_content, bins="auto", density=True)
-    plt.xlabel("Sentences' number per content")
+    plt.figure(f"Tokens' number per content sequence")
+    _ = plt.hist(n_tokens_per_sequence_x, bins="auto", density=True)
+    plt.xlabel("Tokens' number per content sequence")
     plt.ylabel("Density")
-    plt.title(
-        f"{tokenizer_name}\nProbability distribution of the sentences' number per content"
-    )
+    plt.title(f"Probability distribution of the tokens' number per content sequence")
+    plt.savefig(os.path.join(output_path, f"{tokenizer_type}-tokens-per-content.png"))
+
+    plt.figure(f"Tokens' number per annotation sequence")
+    _ = plt.hist(n_tokens_per_sequence_y, bins="auto", density=True)
+    plt.xlabel("Tokens' number per annotation sequence")
+    plt.ylabel("Density")
+    plt.title(f"Probability distribution of the tokens' number per annotation sequence")
     plt.savefig(
-        os.path.join(output_path, f"{tokenizer_name}-sentences-per-content.png")
-    )
-
-    plt.figure(f"{tokenizer_name} Tokens' number per content")
-    _ = plt.hist(n_tokens_per_content, bins="auto", density=True)
-    plt.xlabel("Tokens' number per content")
-    plt.ylabel("Density")
-    plt.title(
-        f"{tokenizer_name}\nProbability distribution of the tokens' number per content"
-    )
-    plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-content.png"))
-
-    plt.figure(f"{tokenizer_name} Tokens' number per sentence")
-    _ = plt.hist(n_tokens_per_sentence, bins="auto", density=True)
-    plt.xlabel("Tokens' number per sentence")
-    plt.ylabel("Density")
-    plt.title(
-        f"{tokenizer_name}\nProbability distribution of the tokens' number per sentence"
-    )
-    plt.savefig(os.path.join(output_path, f"{tokenizer_name}-tokens-per-sentence.png"))
-
-
-def from_wordpiece_ehrpreper(ehrpreper_file_name, wordpiece_vocab_file, output_path):
-    def tokenize_and_get_num_tokens(tokenizer, sentence):
-        tokens = tokenizer.tokenize(sentence)
-        return tokens.flat_values.shape.num_elements()
-
-    logging.info(f"Starting Wordpiece statistic...")
-    tokenizer = wordpiece.WordpieceTokenizer(wordpiece_vocab_file)
-    _from_tokenizer_ehpreper(
-        ehrpreper_file_name,
-        tokenizer,
-        tokenize_and_get_num_tokens,
-        output_path,
-    )
-
-
-def from_sentencepiece_ehrpreper(
-    ehrpreper_file_name, sentencepiece_model_file, output_path
-):
-    def tokenize_and_get_num_tokens(tokenizer, sentence):
-        tokens = tokenizer.tokenize(sentence)
-        return tokens.shape.num_elements()
-
-    logging.info(f"Starting Sentencepiece statistic...")
-    tokenizer = sentencepiece.SentencepieceTokenizer(sentencepiece_model_file)
-    _from_tokenizer_ehpreper(
-        ehrpreper_file_name,
-        tokenizer,
-        tokenize_and_get_num_tokens,
-        output_path,
+        os.path.join(output_path, f"{tokenizer_type}-tokens-per-annotation.png")
     )
 
 

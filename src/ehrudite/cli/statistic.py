@@ -1,6 +1,8 @@
 from argparse import ArgumentParser
 from argparse import RawTextHelpFormatter
 import ehrudite.cli.base as cli_base
+import ehrudite.core.pipeline as pip
+import ehrudite.core.pipeline.tokenizer as pip_tok
 import ehrudite.core.statistic as stat
 import logging
 
@@ -18,15 +20,15 @@ def make_parser():
     )
     parser.add_argument(
         "-w",
-        "--wordpiece_file",
-        action="store",
-        help=r"wordpiece vocab file",
+        "--wordpiece",
+        action="store_true",
+        help=r"statistic for wordpiece",
     )
     parser.add_argument(
         "-s",
-        "--sentencepiece_file",
-        action="store",
-        help=r"sentence model file",
+        "--sentencepiece",
+        action="store_true",
+        help=r"statistics for sentencepiece",
     )
     parser.add_argument(
         "-v",
@@ -47,14 +49,17 @@ def cli():
     logging.info(
         f"Started (ehrpreper_file={args.ehrpreper_file}, output_path={args.output_path})"
     )
-    stat.from_ehrpreper(args.ehrpreper_file, args.output_path)
-    if args.wordpiece_file is not None:
-        stat.from_wordpiece_ehrpreper(
-            args.ehrpreper_file, args.wordpiece_file, args.output_path
+    # stat.from_ehrpreper(args.ehrpreper_file, args.output_path)
+
+    if args.wordpiece:
+        logging.info(f"Wordpiece statistic...")
+        stat.from_tokenizer_ehrpreper(
+            args.ehrpreper_file, pip_tok.TokenizerType.WORDPIECE, args.output_path
         )
-    if args.sentencepiece_file is not None:
-        stat.from_sentencepiece_ehrpreper(
-            args.ehrpreper_file, args.sentencepiece_file, args.output_path
+    if args.sentencepiece:
+        logging.info(f"Sentencepiece statistic...")
+        stat.from_tokenizer_ehrpreper(
+            args.ehrpreper_file, pip_tok.TokenizerType.SENTENCEPIECE, args.output_path
         )
 
     logging.info("Finished")
