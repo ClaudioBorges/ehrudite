@@ -75,18 +75,18 @@ def from_tokenizer_ehrpreper(ehrpreper_file, tokenizer_type, output_path):
             lambda: (tok_x.tokenize(x) for xs in [train_x, test_x] for x in xs),
             _length=len(train_x) + len(test_x),
         )
-        # n_tokens_per_sequence_x += _from_tokenizer_ehpreper(
-        #    x_sequences, os.path.join(output_path, str(tokenizer_type), "contents")
-        # )
+        n_tokens_per_sequence_x += _from_tokenizer_ehpreper(
+            x_sequences, os.path.join(output_path, str(tokenizer_type), "contents")
+        )
 
         logging.info(f"Annotations...")
         y_sequences = er_text.LenghtableRepeatableGenerator(
             lambda: (tok_y.tokenize(y) for ys in [train_y, test_y] for y in ys),
             _length=len(train_y) + len(test_y),
         )
-        # n_tokens_per_sequence_y += _from_tokenizer_ehpreper(
-        #    y_sequences, os.path.join(output_path, str(tokenizer_type), "annotations")
-        # )
+        n_tokens_per_sequence_y += _from_tokenizer_ehpreper(
+            y_sequences, os.path.join(output_path, str(tokenizer_type), "annotations")
+        )
 
     logging.info(
         f"Contents statistic for {tokenizer_type}"
