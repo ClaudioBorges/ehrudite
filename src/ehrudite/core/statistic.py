@@ -107,14 +107,14 @@ def from_tokenizer_ehrpreper(ehrpreper_file, tokenizer_type, output_path):
         f"\n\t\ttotal={len(n_tokens_per_sequence_y)}"
     )
 
-    plt.figure(f"Tokens' number per content sequence")
+    plt.figure(f"{tokenizer_type} - Tokens' number per content sequence")
     _ = plt.hist(n_tokens_per_sequence_x, bins="auto", density=True)
     plt.xlabel("Tokens' number per content sequence")
     plt.ylabel("Density")
     plt.title(f"Probability distribution of the tokens' number per content sequence")
     plt.savefig(os.path.join(output_path, f"{tokenizer_type}-tokens-per-content.png"))
 
-    plt.figure(f"Tokens' number per annotation sequence")
+    plt.figure(f"{tokenizer_type} - Tokens' number per annotation sequence")
     _ = plt.hist(n_tokens_per_sequence_y, bins="auto", density=True)
     plt.xlabel("Tokens' number per annotation sequence")
     plt.ylabel("Density")
