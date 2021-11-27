@@ -15,11 +15,11 @@ import tensorflow as tf
 import time
 
 
-X_MAX_LEN = 2048
-Y_MAX_LEN = 128
-BUFFER_SIZE = 128
-BATCH_SIZE = 8
-ACCURACY_TH = 0.90
+X_MAX_LEN = 512
+Y_MAX_LEN = 64
+BUFFER_SIZE = 512
+BATCH_SIZE = 140
+ACCURACY_TH = 0.80
 # Used for testing a subset of the entire corpus. Use -1 to train with full corpus
 CORPUS_LIMIT = -1
 MODEL_CHECKPOINT_BASE_PATH = os.path.join(pip.BASE_PATH, "model/checkpoint/train/")
@@ -34,7 +34,8 @@ XMFR_XFMR_DROPOUT_RATE = 0.1
 
 
 # LSTM_LSTM
-LSTM_LSTM_EMBEDDING_DIM = 512
+LSTM_LSTM_EMBEDDING_DIM_INP = 512
+LSTM_LSTM_EMBEDDING_DIM_TAR = 32
 LSTM_LSTM_RNN_UNITS = 128
 
 
@@ -108,7 +109,8 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
 
     elif dnn_type == DnnType.LSTM_LSTM:
         model = bi_lstm_attn_m.Seq2SeqBiLstmAttn(
-            embedding_dim=LSTM_LSTM_EMBEDDING_DIM,
+            embedding_dim_inp=LSTM_LSTM_EMBEDDING_DIM_INP,
+            embedding_dim_tar=LSTM_LSTM_EMBEDDING_DIM_TAR,
             units=LSTM_LSTM_RNN_UNITS,
             input_vocab_size=tok_x.vocab_size(),
             target_vocab_size=tok_y.vocab_size(),
@@ -120,7 +122,8 @@ def restore_or_init(run_id, dnn_type, tokenizer_type, restore=True):
             str(tokenizer_type),
             f"run_id={run_id}",
             f"corpus_limit={CORPUS_LIMIT}",
-            f"embedding_dim={LSTM_LSTM_EMBEDDING_DIM}",
+            f"embedding_dim_inp={LSTM_LSTM_EMBEDDING_DIM_INP}",
+            f"embedding_dim_tar={LSTM_LSTM_EMBEDDING_DIM_TAR}",
             f"units={LSTM_LSTM_RNN_UNITS}",
             f"x_len={X_MAX_LEN}",
             f"y_max_len={Y_MAX_LEN}",

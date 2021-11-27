@@ -10,14 +10,15 @@ import tensorflow as tf
 class Seq2SeqBiLstmAttn(tf.keras.Model):
     def __init__(
         self,
-        embedding_dim,
+        embedding_dim_inp,
+        embedding_dim_tar,
         units,
         input_vocab_size,
         target_vocab_size,
     ):
         super().__init__()
-        self.encoder = Encoder(input_vocab_size, embedding_dim, units)
-        self.decoder = Decoder(target_vocab_size, embedding_dim, units)
+        self.encoder = Encoder(input_vocab_size, embedding_dim_inp, units)
+        self.decoder = Decoder(target_vocab_size, embedding_dim_tar, units)
         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
         self.shape_checker = er_helper.ShapeChecker()
 
