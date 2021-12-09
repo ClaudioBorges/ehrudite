@@ -34,3 +34,4 @@ dist
 # Ignore data file
 data/
 input-data/
+logs/

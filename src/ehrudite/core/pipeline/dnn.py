@@ -17,8 +17,10 @@ import time
 
 X_MAX_LEN = 512
 Y_MAX_LEN = 64
-BUFFER_SIZE = 512
-BATCH_SIZE = 140
+BUFFER_SIZE = 1024
+#BATCH_SIZE = 144
+BATCH_SIZE = 245
+#BATCH_SIZE = 34
 ACCURACY_TH = 0.80
 # Used for testing a subset of the entire corpus. Use -1 to train with full corpus
 CORPUS_LIMIT = -1

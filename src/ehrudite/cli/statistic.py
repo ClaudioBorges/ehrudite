@@ -49,7 +49,7 @@ def cli():
     logging.info(
         f"Started (ehrpreper_file={args.ehrpreper_file}, output_path={args.output_path})"
     )
-    # stat.from_ehrpreper(args.ehrpreper_file, args.output_path)
+    stat.from_ehrpreper(args.ehrpreper_file, args.output_path)
 
     if args.wordpiece:
         logging.info(f"Wordpiece statistic...")

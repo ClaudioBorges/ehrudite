@@ -147,6 +147,10 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
 
         # Fine-grain statistic
         k_folded = pip.ehrpreper_k_fold_gen(ehrpreper_file_name)
+
+        annotations_set_train = []
+        annotations_set_test = []
+        annotations_set = []
         for run_id, (
             train_xy,
             test_xy,
@@ -188,6 +192,49 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
                 + f"\n\tunprecedent={set(unprecedent)}"
             )
 
+            partial_annotations_set_train = set(cnt_train.elements())
+            partial_annotations_set_test = set(cnt_test.elements())
+            partial_annotations_set = partial_annotations_set_train.union(
+                partial_annotations_set_test
+            )
+
+            logging.info(
+                f"Partial annotations' distinct classes (train) run_id={run_id}"
+                + f"\n\tlen={len(partial_annotations_set_train)}"
+                + f"\nPartial Annotations' distinct classes (test) run_id={run_id}"
+                + f"\n\tlen={len(partial_annotations_set_test)}"
+                + f"\nPartial Annotations' distinct classes run_id={run_id}"
+                + f"\n\tlen={len(partial_annotations_set)}"
+            )
+            annotations_set_train.append(partial_annotations_set_train)
+            annotations_set_test.append(partial_annotations_set_test)
+            annotations_set.append(partial_annotations_set)
+
+        n_annotations_set_train = [len(vals) for vals in annotations_set_train]
+        n_annotations_set_test = [len(vals) for vals in annotations_set_test]
+        n_annotations_set = [len(vals) for vals in annotations_set]
+
+        logging.info(
+            f"Annotations' distinct classes (train)"
+            + f"\n\tmean={np.mean(n_annotations_set_train)}"
+            + f"\n\tstd={np.std(n_annotations_set_train)}"
+            + f"\n\tmin={np.min(n_annotations_set_train)}"
+            + f"\n\tmax={np.max(n_annotations_set_train)}"
+            + f"\n\tvalues={n_annotations_set_train}"
+            + f"\nAnnotations' distinct classes (test)"
+            + f"\n\tmean={np.mean(n_annotations_set_test)}"
+            + f"\n\tstd={np.std(n_annotations_set_test)}"
+            + f"\n\tmin={np.min(n_annotations_set_test)}"
+            + f"\n\tmax={np.max(n_annotations_set_test)}"
+            + f"\n\tvalues={n_annotations_set_test}"
+            + f"\nAnnotations' distinct classes"
+            + f"\n\tmean={np.mean(n_annotations_set)}"
+            + f"\n\tstd={np.std(n_annotations_set)}"
+            + f"\n\tmin={np.min(n_annotations_set)}"
+            + f"\n\tmax={np.max(n_annotations_set)}"
+            + f"\n\tvalues={n_annotations_set}"
+        )
+
     def _content_stat(contents):
         n_len_contents = [len(content) for content in contents]
         logging.info(
@@ -214,4 +261,5 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
     contents = _load_contents_from_ehrpreper(ehrpreper_file_name)
 
     _annotations_stat(annotations_collections)
-    # _content_stat(contents)
+    _content_stat(contents)
+
