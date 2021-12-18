@@ -125,6 +125,22 @@ def from_tokenizer_ehrpreper(ehrpreper_file, tokenizer_type, output_path):
 
 
 def from_ehrpreper(ehrpreper_file_name, output_path):
+    def _annotations_distribution_stat(annotations_collections):
+        cnts = Counter(
+            [
+                annotation
+                for annotations in annotations_collections
+                for annotation in er_text.preprocess_icds9(annotations).split()
+            ]
+        )
+        pretty = " |".join([f"{elm}, {cnt}" for elm, cnt in cnts.most_common()])
+        logging.info(
+            "Annotations' distribution"
+            + f"\n\tdistincts={len(set(cnts))}"
+            + f"\n\ttotal={sum(cnts.values())}"
+            + f"\n\tpretty={pretty}"
+        )
+
     def _annotations_stat(annotations_collections):
         n_annotations = [len(annotations) for annotations in annotations_collections]
         logging.info(
@@ -260,6 +276,6 @@ def from_ehrpreper(ehrpreper_file_name, output_path):
     )
     contents = _load_contents_from_ehrpreper(ehrpreper_file_name)
 
+    _annotations_distribution_stat(annotations_collections)
     _annotations_stat(annotations_collections)
     _content_stat(contents)
-
